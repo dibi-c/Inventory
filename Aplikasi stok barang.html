@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-IMS: Inventaris Komponen Elektronik</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, orderBy, limit, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Menggunakan setLogLevel('Debug') untuk melihat log detail di console
+        setLogLevel('Debug');
+
+        // --- Variabel Global Canvas (Harus Digunakan) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // --- Mendapatkan Konfigurasi Firebase ---
+        let firebaseConfig = null;
+        const savedConfig = localStorage.getItem('eims_firebase_config');
+
+        if (savedConfig) {
+            try {
+                firebaseConfig = JSON.parse(savedConfig);
+                console.log("Menggunakan konfigurasi Firebase dari Local Storage.");
+            } catch (e) {
+                console.error("Gagal memparsing konfigurasi Firebase dari Local Storage. Menggunakan default/Canvas.", e);
+                firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+                    apiKey: "AIzaSyDLlc2nBOG6hesoQmhTD55BuRc5l7UF87I",
+                    authDomain: "batmon-5c279.firebaseapp.com",
+                    databaseURL: "https://batmon-5c279-default-rtdb.asia-southeast1.firebasedatabase.app",
+                    projectId: "batmon-5c279",
+                    storageBucket: "batmon-5c279.firebasestorage.app",
+                    messagingSenderId: "718766895236",
+                    appId: "1:718766895236:web:898d4cd85941d98dcd52d1"
+                };
+            }
+        } else {
+             firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+                apiKey: "AIzaSyDLlc2nBOG6hesoQmhTD55BuRc5l7UF87I",
+                authDomain: "batmon-5c279.firebaseapp.com",
+                databaseURL: "https://batmon-5c279-default-rtdb.asia-southeast1.firebasedatabase.app",
+                projectId: "batmon-5c279",
+                storageBucket: "batmon-5c279.firebasestorage.app",
+                messagingSenderId: "718766895236",
+                appId: "1:718766895236:web:898d4cd85941d98dcd52d1"
+            };
+        }
+        
+        // --- Inisialisasi Firebase ---
+        let app = null;
+        let auth = null;
+        let db = null;
+        
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Gagal menginisialisasi Firebase dengan konfigurasi yang diberikan:", e);
+            // Tampilkan pesan error di UI jika inisialisasi gagal
+            window.onload = () => {
+                getEl('login-view').classList.remove('hidden');
+                showMessageModal('Error Fatal', 'Gagal menginisialisasi Firebase. Pastikan konfigurasi API Key dan Project ID sudah benar di "Konfigurasi Lanjut".');
+            };
+        }
+
+
+        // --- Variabel State Aplikasi ---
+        let userId = null;
+        let userName = 'Anonim';
+        let inventory = [];
+        let transactions = [];
+        let currentView = 'login'; // login, dashboard, list, detail, scan
+        let selectedComponentId = null;
+        let isAuthReady = false;
+        let listenersAttached = false; // Flag untuk mencegah duplikasi listener
+        let isSidebarOpen = true; // State untuk toggle sidebar
+
+        // --- Referensi Koleksi Firestore (Publik) ---
+        const getComponentColRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'components');
+        const getTransactionColRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+
+        // --- Helpers UI ---
+        const getEl = (id) => document.getElementById(id);
+        const hideAllViews = () => {
+            document.querySelectorAll('.app-view').forEach(el => el.classList.add('hidden'));
+        };
+        const showView = (viewName) => {
+            hideAllViews();
+            const viewEl = getEl(`${viewName}-view`);
+            if (viewEl) {
+                viewEl.classList.remove('hidden');
+            }
+            currentView = viewName;
+
+            // Logika spesifik per view
+            if (viewName === 'scan') {
+                startScanner();
+            } else {
+                stopScanner();
+            }
+            if (viewName === 'detail' && selectedComponentId) {
+                renderComponentDetail();
+            }
+            if (viewName === 'list') {
+                renderInventoryList();
+            }
+        };
+
+        const showMessageModal = (title, message) => {
+            getEl('modal-title').textContent = title;
+            getEl('modal-message').textContent = message;
+            getEl('message-modal').classList.remove('hidden');
+        };
+
+        const closeModal = () => {
+            getEl('message-modal').classList.add('hidden');
+            getEl('item-form-modal').classList.add('hidden');
+            getEl('stock-modal').classList.add('hidden');
+        };
+
+        // --- Sidebar Toggle Logic ---
+        const toggleSidebar = () => {
+            isSidebarOpen = !isSidebarOpen;
+            const body = document.body;
+            const toggleIcon = getEl('toggle-icon');
+
+            if (isSidebarOpen) {
+                body.classList.remove('sidebar-closed');
+                body.classList.add('sidebar-open');
+                toggleIcon.setAttribute('data-lucide', 'chevrons-left');
+            } else {
+                body.classList.remove('sidebar-open');
+                body.classList.add('sidebar-closed');
+                toggleIcon.setAttribute('data-lucide', 'chevrons-right');
+            }
+            // Re-render Lucide icons after changing attribute
+            lucide.createIcons();
+        };
+
+        // --- Otentikasi dan Listener ---
+        
+        // Fungsi untuk penundaan dengan Exponential Backoff
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Mencoba otentikasi dengan exponential backoff
+        const authenticate = async (maxRetries = 5) => {
+            if (auth.currentUser) return;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Canvas Auth successful.");
+                    } else {
+                        await signInAnonymously(auth);
+                        console.log("Anonymous Auth successful.");
+                    }
+                    return; 
+                } catch (error) {
+                    const delayTime = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    console.warn(`Auth failed, retrying in ${delayTime / 1000}s...`, error.message);
+                    if (i < maxRetries - 1) {
+                        await delay(delayTime);
+                    } else {
+                        console.error("Failed to authenticate after multiple retries.", error);
+                    }
+                }
+            }
+        };
+
+        // Real-time listener untuk data komponen
+        const setupInventoryListener = () => {
+            if (!isAuthReady) return;
+
+            const q = query(getComponentColRef());
+
+            onSnapshot(q, (snapshot) => {
+                inventory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderDashboard();
+                if (currentView === 'list') {
+                    renderInventoryList();
+                }
+                if (currentView === 'detail' && selectedComponentId) {
+                    renderComponentDetail();
+                }
+                console.log('Inventory Updated:', inventory.length, 'items');
+            }, (error) => {
+                console.error("Error fetching inventory:", error);
+            });
+        };
+
+        // Real-time listener untuk data transaksi
+        const setupTransactionListener = () => {
+            if (!isAuthReady) return;
+
+            const q = query(getTransactionColRef(), orderBy('timestamp', 'desc'), limit(50));
+
+            onSnapshot(q, (snapshot) => {
+                transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (currentView === 'detail' && selectedComponentId) {
+                    renderComponentDetail();
+                }
+                console.log('Transactions Updated:', transactions.length, 'records');
+            }, (error) => {
+                console.error("Error fetching transactions:", error);
+            });
+        };
+
+        const handleAuthChange = (user) => {
+            if (user) {
+                userId = user.uid;
+                userName = user.email || 'Teknisi ' + user.uid.substring(0, 4);
+                getEl('user-info').textContent = userName;
+                isAuthReady = true;
+                
+                // Pindah ke Dashboard jika baru login
+                if (currentView === 'login') {
+                    showView('dashboard');
+                }
+                
+                // Setup listeners *hanya sekali* setelah berhasil login
+                if (!listenersAttached) {
+                    setupInventoryListener();
+                    setupTransactionListener();
+                    listenersAttached = true;
+                }
+
+            } else {
+                userId = null;
+                isAuthReady = false;
+                listenersAttached = false; // Reset jika log out
+                showView('login');
+            }
+        };
+
+        // Listener utama untuk perubahan status otentikasi
+        if (auth) {
+            onAuthStateChanged(auth, handleAuthChange);
+        }
+        
+        // Memastikan otentikasi Canvas dijalankan jika token tersedia
+        if (initialAuthToken && auth) {
+            authenticate();
+        }
+        
+        // --- Logika Konfigurasi Firebase ---
+        const toggleFirebaseConfigForm = () => {
+            const form = getEl('firebase-config-form');
+            form.classList.toggle('hidden');
+            const button = getEl('toggle-config-btn');
+            if (form.classList.contains('hidden')) {
+                button.innerHTML = '<i data-lucide="settings" class="w-4 h-4 inline mr-1"></i> Konfigurasi Lanjut';
+            } else {
+                 button.innerHTML = '<i data-lucide="settings-x" class="w-4 h-4 inline mr-1"></i> Sembunyikan Konfigurasi';
+                 
+                 // Isi form dengan config yang sedang berjalan (jika ada)
+                 if (firebaseConfig) {
+                     getEl('config-apikey').value = firebaseConfig.apiKey || '';
+                     getEl('config-authdomain').value = firebaseConfig.authDomain || '';
+                     getEl('config-projectid').value = firebaseConfig.projectId || '';
+                 }
+            }
+            lucide.createIcons();
+        };
+        
+        const saveFirebaseConfig = () => {
+            const apiKey = getEl('config-apikey').value.trim();
+            const authDomain = getEl('config-authdomain').value.trim();
+            const projectId = getEl('config-projectid').value.trim();
+            
+            if (!apiKey || !projectId) {
+                showMessageModal('Gagal Menyimpan', 'API Key dan Project ID wajib diisi.');
+                return;
+            }
+            
+            const newConfig = {
+                apiKey: apiKey,
+                authDomain: authDomain || `${projectId}.firebaseapp.com`,
+                projectId: projectId,
+                // Nilai default lain yang mungkin diperlukan
+                storageBucket: `${projectId}.appspot.com`,
+            };
+            
+            try {
+                localStorage.setItem('eims_firebase_config', JSON.stringify(newConfig));
+                showMessageModal('Berhasil', 'Konfigurasi Firebase baru telah disimpan. Aplikasi akan dimuat ulang untuk menggunakannya.');
+                
+                // Muat ulang aplikasi agar konfigurasi baru diterapkan
+                setTimeout(() => window.location.reload(), 1500);
+            } catch (e) {
+                showMessageModal('Error', 'Gagal menyimpan konfigurasi ke Local Storage: ' + e.message);
+            }
+        };
+        
+        // --- Logika Login/Register ---
+        getEl('login-btn').onclick = async () => {
+            const email = getEl('login-email').value;
+            const password = getEl('login-password').value;
+            
+            if (!auth) {
+                showMessageModal('Error', 'Firebase belum diinisialisasi. Cek Konfigurasi Lanjut.');
+                return;
+            }
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                showMessageModal('Berhasil', 'Login berhasil! Selamat datang.');
+            } catch (error) {
+                showMessageModal('Error Login', error.message);
+            }
+        };
+
+        getEl('register-btn').onclick = async () => {
+            const email = getEl('login-email').value;
+            const password = getEl('login-password').value;
+            
+            if (!auth) {
+                showMessageModal('Error', 'Firebase belum diinisialisasi. Cek Konfigurasi Lanjut.');
+                return;
+            }
+
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                showMessageModal('Berhasil', 'Registrasi dan Login berhasil! Selamat datang.');
+            } catch (error) {
+                showMessageModal('Error Register', error.message);
+            }
+        };
+
+        getEl('logout-btn').onclick = async () => {
+            try {
+                await signOut(auth);
+                // Modal akan tertutup dengan tombol 'Tutup' yang sudah diperbaiki
+                showMessageModal('Informasi', 'Anda telah berhasil Logout.');
+            } catch (error) {
+                showMessageModal('Error Logout', error.message);
+            }
+        };
+
+
+        // --- Fungsi CRUD Komponen ---
+
+        const saveComponent = async () => {
+            const id = getEl('item-id').value.trim();
+            const name = getEl('item-name').value.trim();
+            const category = getEl('item-category').value.trim();
+            const value = getEl('item-value').value.trim();
+            const pkg = getEl('item-package').value.trim();
+            const brand = getEl('item-brand').value.trim();
+            const location = getEl('item-location').value.trim();
+            const minStock = parseInt(getEl('item-minstock').value) || 0;
+            const unit = getEl('item-unit').value.trim();
+            const barcodeContent = getEl('item-barcode').value.trim() || id;
+            
+            if (!id || !name || !value || !location) {
+                showMessageModal('Gagal', 'Kode Barang, Nama, Spesifikasi, dan Lokasi wajib diisi.');
+                return;
+            }
+
+            const isEditing = getEl('item-form-modal').dataset.mode === 'edit';
+            const componentRef = isEditing ? doc(getComponentColRef(), selectedComponentId) : doc(getComponentColRef());
+
+            const componentData = {
+                itemId: id,
+                name,
+                category,
+                value,
+                package: pkg,
+                brand,
+                location,
+                minStock,
+                unit,
+                barcodeContent,
+                updatedAt: serverTimestamp(),
+            };
+
+            try {
+                if (isEditing) {
+                    await updateDoc(componentRef, componentData);
+                    showMessageModal('Berhasil', 'Data komponen berhasil diperbarui.');
+                } else {
+                    // Cek duplikasi itemId sebelum tambah
+                    const existingItem = inventory.find(item => item.itemId === id);
+                    if (existingItem) {
+                         showMessageModal('Gagal', 'Kode Barang sudah ada. Gunakan kode unik.');
+                         return;
+                    }
+                    await setDoc(componentRef, {
+                        ...componentData,
+                        stock: 0,
+                        photoUrl: 'https://placehold.co/100x100/A0A0A0/ffffff?text=E-Comp', // Placeholder foto
+                        createdAt: serverTimestamp(),
+                    });
+                    showMessageModal('Berhasil', 'Komponen baru berhasil ditambahkan.');
+                }
+                closeModal();
+            } catch (error) {
+                showMessageModal('Error', 'Gagal menyimpan data komponen: ' + error.message);
+            }
+        };
+
+        const deleteComponent = async (componentId) => {
+            if (!confirm('Anda yakin ingin menghapus komponen ini? Semua riwayat stok juga akan terhapus.')) return;
+            try {
+                await deleteDoc(doc(getComponentColRef(), componentId));
+                showMessageModal('Berhasil', 'Komponen berhasil dihapus.');
+                showView('list');
+            } catch (error) {
+                showMessageModal('Error', 'Gagal menghapus komponen: ' + error.message);
+            }
+        };
+
+        // --- Fungsi Transaksi Stok ---
+
+        const updateStock = async () => {
+            const type = getEl('stock-type').value; // 'IN' atau 'OUT'
+            const quantity = parseInt(getEl('stock-quantity').value) || 0;
+            const notes = getEl('stock-notes').value.trim();
+            
+            if (quantity <= 0) {
+                showMessageModal('Gagal', 'Kuantitas harus lebih dari 0.');
+                return;
+            }
+
+            if (!selectedComponentId) {
+                showMessageModal('Gagal', 'ID Komponen tidak ditemukan.');
+                return;
+            }
+
+            const component = inventory.find(i => i.id === selectedComponentId);
+
+            if (!component) {
+                 showMessageModal('Gagal', 'Komponen tidak ditemukan di database.');
+                return;
+            }
+
+            const componentRef = doc(getComponentColRef(), selectedComponentId);
+            const transactionRef = doc(getTransactionColRef());
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const componentDoc = await transaction.get(componentRef);
+                    if (!componentDoc.exists()) {
+                        throw "Dokumen Komponen tidak ditemukan!";
+                    }
+
+                    const currentStock = componentDoc.data().stock || 0;
+                    const newStock = currentStock + (type === 'IN' ? quantity : -quantity);
+                    
+                    if (type === 'OUT' && currentStock < quantity) {
+                        throw `Stok keluar (${quantity}) melebihi stok tersedia (${currentStock}).`;
+                    }
+                    
+                    // Update Stok Komponen
+                    transaction.update(componentRef, { 
+                        stock: newStock,
+                        updatedAt: serverTimestamp()
+                    });
+
+                    // Tambah Riwayat Transaksi
+                    transaction.set(transactionRef, {
+                        componentId: selectedComponentId,
+                        itemId: component.itemId,
+                        name: component.name,
+                        type,
+                        quantity,
+                        newStock,
+                        notes,
+                        pic: userName,
+                        timestamp: serverTimestamp(),
+                    });
+                });
+
+                showMessageModal('Berhasil', `Stok ${component.name} berhasil diperbarui: ${type === 'IN' ? '+' : '-'}${quantity} ${component.unit}.`);
+                closeModal();
+            } catch (e) {
+                showMessageModal('Error Transaksi', "Gagal melakukan transaksi: " + (e.message || e));
+            }
+        };
+        
+        // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
+        // Menggunakan JsBarcode (via CDN) untuk merender Code-128
+        const generateBarcodeDisplay = (content) => {
+            // ID unik untuk elemen SVG barcode agar bisa dirender oleh JsBarcode
+            const barcodeId = `barcode-${selectedComponentId || Date.now()}`; 
+            
+            // String HTML untuk tampilan Barcode (SVG)
+            // *QR Code placeholder telah dihapus*
+            const displayHtml = `
+                <div class="p-4 bg-white border border-gray-300 rounded-lg text-center mt-4">
+                    <h4 class="font-bold text-gray-700 mb-2">Barcode (Code-128)</h4>
+                    
+                    <svg id="${barcodeId}" class="mx-auto"></svg>
+                    
+                    <p class="mt-2 text-sm text-gray-600 font-mono break-all">${content}</p>
+                </div>
+            `;
+
+            // Panggil JsBarcode setelah elemen SVG dimasukkan ke DOM.
+            // Timeout 100ms digunakan untuk memastikan DOM telah diperbarui.
+            setTimeout(() => {
+                const svgElement = getEl(barcodeId);
+                if (svgElement && window.JsBarcode) {
+                    try {
+                        window.JsBarcode(`#${barcodeId}`, content, {
+                            format: "CODE128", // Format Code-128
+                            displayValue: true,
+                            width: 2,
+                            height: 50,
+                            margin: 10
+                        });
+                        console.log('Barcode rendered successfully for content:', content);
+                    } catch (e) {
+                        console.error("Gagal merender Barcode:", e);
+                        svgElement.innerHTML = `<p class="text-red-500 text-sm">Error saat merender barcode: ${e.message}</p>`;
+                    }
+                }
+            }, 100); 
+
+            return displayHtml;
+        };
+        
+        // --- Fungsi Barcode (Scanner) ---
+        // Menggunakan library html5-qrcode via CDN
+        let Html5Qrcode = window.Html5Qrcode;
+        let html5QrcodeScanner = null;
+
+        const startScanner = () => {
+            if (!Html5Qrcode) {
+                getEl('scanner-result').innerHTML = `<p class="text-red-500 font-bold">Error: Library Scanner tidak tersedia. Memuat ulang...</p>`;
+                loadScannerLibrary(startScanner); // Coba muat ulang dan panggil fungsi ini lagi
+                return;
+            }
+
+            if (html5QrcodeScanner) {
+                try {
+                    html5QrcodeScanner.clear(); 
+                } catch(e) {
+                    // ignore
+                }
+            }
+
+            html5QrcodeScanner = new Html5Qrcode("reader");
+            
+            const onScanSuccess = (decodedText, decodedResult) => {
+                stopScanner();
+                handleScannedBarcode(decodedText);
+            };
+
+            const config = { fps: 10, qrbox: { width: 250, height: 250 }, disableFlip: false };
+            
+            // Coba mendapatkan kamera, jika gagal tampilkan pesan error
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    html5QrcodeScanner.start(
+                        { facingMode: "environment" },
+                        config,
+                        onScanSuccess,
+                        (errorMessage) => {
+                            // Pesan error scan minor
+                        }
+                    ).catch((err) => {
+                        getEl('scanner-result').innerHTML = `<p class="text-red-500 font-bold">Gagal memulai scanner: ${err.message}</p>`;
+                        console.error("Error starting scanner:", err);
+                    });
+                    getEl('scanner-result').innerHTML = `<p class="text-blue-500 font-bold">Siap memindai... Arahkan kamera ke Barcode/QR Code.</p>`;
+                } else {
+                    getEl('scanner-result').innerHTML = `<p class="text-red-500 font-bold">Gagal: Tidak ada kamera yang terdeteksi pada perangkat ini.</p>`;
+                }
+            }).catch(err => {
+                getEl('scanner-result').innerHTML = `<p class="text-red-500 font-bold">Gagal: Izin kamera ditolak atau tidak terdeteksi: ${err.message}</p>`;
+            });
+        };
+
+        const stopScanner = () => {
+            if (html5QrcodeScanner) {
+                if (html5QrcodeScanner.isScanning) {
+                    html5QrcodeScanner.stop().then(() => {
+                        console.log("Scanner stopped.");
+                    }).catch((err) => {
+                        console.error("Error stopping scanner:", err);
+                    });
+                }
+                html5QrcodeScanner.clear();
+                html5QrcodeScanner = null;
+            }
+        };
+        
+        const handleScannedBarcode = (barcode) => {
+            getEl('scanner-result').innerHTML = `<p class="text-green-600 font-bold">Kode terdeteksi: ${barcode}. Mencari data...</p>`;
+            
+            const component = inventory.find(i => i.barcodeContent === barcode);
+
+            if (component) {
+                selectedComponentId = component.id;
+                showView('detail');
+                showMessageModal('Ditemukan', `Komponen ${component.name} ditemukan!`);
+            } else {
+                showMessageModal('Tidak Ditemukan', `Barcode/Kode Barang "${barcode}" tidak ditemukan. Silakan tambahkan komponen baru.`);
+                
+                // Isi form tambah komponen dengan barcode yang discan
+                openItemFormModal('add');
+                getEl('item-id').value = barcode;
+                getEl('item-barcode').value = barcode;
+            }
+        };
+
+        // --- Render UI ---
+
+        // Render Dashboard
+        const renderDashboard = () => {
+            if (!userId) return; 
+            
+            const totalItems = inventory.length;
+            const totalStock = inventory.reduce((sum, item) => sum + (item.stock || 0), 0);
+            
+            const lowStockItems = inventory.filter(item => item.stock <= item.minStock && item.minStock > 0);
+            const lowStockCount = lowStockItems.length;
+
+            getEl('total-items').textContent = totalItems;
+            getEl('total-stock').textContent = totalStock;
+            getEl('low-stock-count').textContent = lowStockCount;
+
+            const lowStockList = getEl('low-stock-list');
+            lowStockList.innerHTML = '';
+            
+            if (lowStockCount > 0) {
+                lowStockItems.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'p-3 bg-red-100 rounded-lg cursor-pointer hover:bg-red-200 transition';
+                    li.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold">${item.name} (${item.value})</span>
+                            <span class="text-sm font-mono bg-red-500 text-white px-2 py-1 rounded-full">${item.stock} ${item.unit}</span>
+                        </div>
+                        <p class="text-xs text-red-700 mt-1">Min: ${item.minStock} | Lokasi: ${item.location}</p>
+                    `;
+                    li.onclick = () => {
+                        selectedComponentId = item.id;
+                        showView('detail');
+                    };
+                    lowStockList.appendChild(li);
+                });
+                getEl('low-stock-alert').classList.remove('hidden');
+            } else {
+                 getEl('low-stock-alert').classList.add('hidden');
+                 lowStockList.innerHTML = '<p class="text-center text-gray-500 p-4">Semua stok di atas batas minimum. Kerja bagus!</p>';
+            }
+        };
+
+        // Render List Inventaris
+        const renderInventoryList = (searchTerm = '') => {
+            const listEl = getEl('inventory-list');
+            listEl.innerHTML = '';
+
+            const term = searchTerm.toLowerCase();
+            const filteredInventory = inventory.filter(item => 
+                item.name?.toLowerCase().includes(term) ||
+                item.value?.toLowerCase().includes(term) ||
+                item.package?.toLowerCase().includes(term) ||
+                item.location?.toLowerCase().includes(term) ||
+                item.itemId?.toLowerCase().includes(term)
+            ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+            if (filteredInventory.length === 0) {
+                listEl.innerHTML = `
+                    <p class="text-center text-gray-500 p-8">
+                        Tidak ada komponen yang ditemukan. 
+                        ${term ? `Coba cari dengan kata kunci lain atau ` : ''} 
+                        <span class="font-bold cursor-pointer text-blue-600 hover:text-blue-800" onclick="document.getElementById('add-item-btn').click()">
+                            tambahkan komponen baru.
+                        </span>
+                    </p>
+                `;
+                return;
+            }
+
+            filteredInventory.forEach(item => {
+                const isLowStock = item.stock <= item.minStock && item.minStock > 0;
+                const lowStockClass = isLowStock ? 'bg-red-100 border-red-400' : 'bg-white border-gray-200';
+                
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `p-4 border shadow-sm rounded-xl cursor-pointer hover:shadow-lg transition ${lowStockClass}`;
+                itemDiv.onclick = () => {
+                    selectedComponentId = item.id;
+                    showView('detail');
+                };
+                
+                itemDiv.innerHTML = `
+                    <div class="flex items-center space-x-4">
+                        <img src="${item.photoUrl}" alt="${item.name}" class="w-12 h-12 object-cover rounded-md flex-shrink-0">
+                        <div class="flex-grow min-w-0">
+                            <p class="text-lg font-bold truncate">${item.name}</p>
+                            <p class="text-sm text-gray-600 truncate">${item.value} | ${item.package || 'N/A'}</p>
+                        </div>
+                        <div class="flex flex-col items-end flex-shrink-0">
+                            <span class="font-extrabold text-2xl ${isLowStock ? 'text-red-600' : 'text-green-600'}">${item.stock || 0}</span>
+                            <span class="text-xs text-gray-500">${item.unit || 'pcs'}</span>
+                            <span class="text-xs text-gray-500">Lok: ${item.location}</span>
+                        </div>
+                    </div>
+                `;
+                listEl.appendChild(itemDiv);
+            });
+        };
+
+        // Render Detail Komponen
+        const renderComponentDetail = () => {
+            const item = inventory.find(i => i.id === selectedComponentId);
+            const detailEl = getEl('item-detail');
+            const historyEl = getEl('item-history');
+            
+            if (!item) {
+                detailEl.innerHTML = '<p class="p-4 text-red-500">Komponen tidak ditemukan.</p>';
+                return;
+            }
+
+            // Update UI Detail
+            getEl('detail-name').textContent = item.name;
+            getEl('detail-id').textContent = item.itemId;
+            getEl('detail-stock').textContent = item.stock || 0;
+            getEl('detail-unit').textContent = item.unit || 'pcs';
+            getEl('detail-value').textContent = item.value;
+            getEl('detail-package').textContent = item.package || '-';
+            getEl('detail-brand').textContent = item.brand || '-';
+            getEl('detail-location').textContent = item.location;
+            getEl('detail-minstock').textContent = item.minStock || 0;
+            getEl('detail-photo').src = item.photoUrl;
+
+            // Barcode Display
+            getEl('barcode-display').innerHTML = generateBarcodeDisplay(item.barcodeContent);
+
+            // Button Edit & Delete
+            getEl('edit-item-btn').onclick = () => openItemFormModal('edit', item);
+            getEl('delete-item-btn').onclick = () => deleteComponent(item.id);
+
+            // Button Stok Masuk/Keluar
+            getEl('stock-in-btn').onclick = () => openStockModal('IN', item);
+            getEl('stock-out-btn').onclick = () => openStockModal('OUT', item);
+            
+            // Render Riwayat Transaksi
+            const itemHistory = transactions
+                .filter(t => t.componentId === selectedComponentId)
+                // Sort array in memory
+                .sort((a, b) => {
+                    const dateA = a.timestamp?.seconds || 0;
+                    const dateB = b.timestamp?.seconds || 0;
+                    return dateB - dateA;
+                });
+
+            historyEl.innerHTML = '';
+            if (itemHistory.length === 0) {
+                historyEl.innerHTML = '<p class="text-center text-gray-500 p-4">Belum ada riwayat transaksi.</p>';
+            } else {
+                itemHistory.forEach(t => {
+                    const isIN = t.type === 'IN';
+                    const colorClass = isIN ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                    const sign = isIN ? '+' : '-';
+
+                    const date = t.timestamp ? new Date(t.timestamp.seconds * 1000).toLocaleString('id-ID') : 'N/A';
+                    
+                    historyEl.innerHTML += `
+                        <div class="p-3 border-b last:border-b-0 flex justify-between items-center ${isIN ? 'hover:bg-green-50' : 'hover:bg-red-50'} transition">
+                            <div>
+                                <span class="font-bold ${isIN ? 'text-green-600' : 'text-red-600'}">${isIN ? 'Stok Masuk' : 'Stok Keluar'}</span>
+                                <p class="text-xs text-gray-500">Oleh: ${t.pic}</p>
+                                <p class="text-xs text-gray-500">${date}</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-lg font-bold ${isIN ? 'text-green-700' : 'text-red-700'}">${sign}${t.quantity} ${item.unit}</span>
+                                <p class="text-sm text-gray-600">Sisa: ${t.newStock}</p>
+                                <p class="text-xs text-gray-500 mt-1 italic break-all max-w-[150px]">${t.notes}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        };
+
+        // --- Modals ---
+
+        const openItemFormModal = (mode, item = {}) => {
+            const formModal = getEl('item-form-modal');
+            const formTitle = getEl('item-form-title');
+            
+            formModal.dataset.mode = mode;
+            
+            // Reset form
+            getEl('item-id').value = '';
+            getEl('item-name').value = '';
+            getEl('item-category').value = 'Resistor';
+            getEl('item-value').value = '';
+            getEl('item-package').value = '';
+            getEl('item-brand').value = '';
+            getEl('item-location').value = '';
+            getEl('item-minstock').value = '0';
+            getEl('item-unit').value = 'pcs';
+            getEl('item-barcode').value = '';
+            getEl('item-id').readOnly = false;
+            
+            if (mode === 'edit') {
+                formTitle.textContent = 'Edit Komponen: ' + item.name;
+                getEl('item-id').value = item.itemId || '';
+                getEl('item-name').value = item.name || '';
+                getEl('item-category').value = item.category || 'Resistor';
+                getEl('item-value').value = item.value || '';
+                getEl('item-package').value = item.package || '';
+                getEl('item-brand').value = item.brand || '';
+                getEl('item-location').value = item.location || '';
+                getEl('item-minstock').value = item.minStock || 0;
+                getEl('item-unit').value = item.unit || 'pcs';
+                getEl('item-barcode').value = item.barcodeContent || item.itemId || '';
+                getEl('item-id').readOnly = true; // Jangan izinkan edit ID di mode edit
+            } else { // add mode
+                formTitle.textContent = 'Tambah Komponen Baru';
+            }
+
+            formModal.classList.remove('hidden');
+        };
+
+        const openStockModal = (type, item) => {
+            const modal = getEl('stock-modal');
+            getEl('stock-type').value = type;
+            getEl('stock-title').textContent = type === 'IN' ? 'Stok Masuk' : 'Stok Keluar';
+            getEl('stock-component-name').textContent = item.name;
+            getEl('stock-current-stock').textContent = `${item.stock} ${item.unit}`;
+            getEl('stock-quantity').value = '';
+            getEl('stock-notes').value = '';
+            modal.classList.remove('hidden');
+        };
+
+
+        // --- Event Listeners UI Global ---
+
+        // Navigasi
+        const handleNavClick = (viewName) => {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            getEl(`nav-${viewName}`).classList.add('active');
+            showView(viewName);
+        };
+        getEl('nav-dashboard').onclick = () => handleNavClick('dashboard');
+        getEl('nav-list').onclick = () => handleNavClick('list');
+        getEl('nav-scan').onclick = () => handleNavClick('scan');
+        getEl('sidebar-toggle-btn').onclick = toggleSidebar;
+
+        // Pencarian Cepat
+        getEl('search-input').oninput = (e) => renderInventoryList(e.target.value);
+        
+        // Tombol Tambah Komponen
+        getEl('add-item-btn').onclick = () => openItemFormModal('add');
+
+        // Tombol Simpan Komponen
+        getEl('save-item-btn').onclick = saveComponent;
+        
+        // Tombol Simpan Transaksi
+        getEl('save-stock-btn').onclick = updateStock;
+        
+        // Tombol Konfigurasi Firebase
+        getEl('toggle-config-btn').onclick = toggleFirebaseConfigForm;
+        getEl('save-config-btn').onclick = saveFirebaseConfig;
+
+        // Tombol Tutup Modal
+        document.querySelectorAll('.close-modal-btn').forEach(btn => {
+            btn.onclick = closeModal;
+        });
+
+        // Tombol Tutup Modal Pesan (Penting untuk mengatasi masalah logout)
+        getEl('message-modal-close-btn').onclick = closeModal;
+
+        // Load Barcode Scanner Library (html5-qrcode)
+        const loadScannerLibrary = (callback = null) => {
+            if (typeof Html5Qrcode === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/html5-qrcode';
+                document.head.appendChild(script);
+                script.onload = () => {
+                    console.log('html5-qrcode loaded.');
+                    // Set the global reference after successful load
+                    Html5Qrcode = window.Html5Qrcode;
+                    if (callback) callback();
+                };
+                script.onerror = () => {
+                    console.error('Failed to load html5-qrcode.');
+                };
+            } else if (callback) {
+                callback();
+            }
+        };
+
+        // Inisialisasi awal aplikasi
+        window.addEventListener('DOMContentLoaded', () => {
+             // 1. Muat library scanner secara non-blocking
+            loadScannerLibrary();
+            
+            // 2. Terapkan status sidebar awal
+            document.body.classList.add('sidebar-open');
+            // Pastikan toggle-icon ada sebelum mencoba mengaksesnya
+            const toggleIcon = getEl('toggle-icon');
+            if (toggleIcon) {
+                toggleIcon.setAttribute('data-lucide', 'chevrons-left'); // Set icon awal
+            }
+            
+            // 3. Jika auth belum terinisialisasi (misal, karena error config), pastikan di login view.
+            if (!auth || !auth.currentUser) {
+                 showView('login');
+            }
+        });
+        
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* General Transition Definition for Sidebar and Content */
+        .sidebar {
+            transition: width 0.3s ease;
+        }
+        .content {
+            transition: padding-left 0.3s ease;
+        }
+
+        /* Responsive for mobile (Sidebar becomes bottom bar) */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: fixed;
+                bottom: 0;
+                z-index: 10;
+                box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.1), 0 -2px 4px -2px rgb(0 0 0 / 0.1);
+            }
+            .content {
+                padding-left: 0;
+                padding-bottom: 80px; /* Space for mobile nav */
+            }
+            #sidebar-toggle-btn {
+                display: none; /* Hide toggle button on mobile */
+            }
+        }
+        
+        /* Desktop States (min-width: 768px) */
+        @media (min-width: 768px) {
+            
+            /* --- Sidebar Open State (280px) --- */
+            .sidebar-open .sidebar {
+                width: 280px;
+            }
+            .sidebar-open .content {
+                padding-left: 280px; /* Fix: Explicitly define padding for open state */
+            }
+            .nav-label {
+                opacity: 1;
+                width: auto;
+                transition: opacity 0.1s ease, width 0.3s ease;
+            }
+
+
+            /* --- Sidebar Closed State (80px) --- */
+            .sidebar-closed .sidebar {
+                width: 80px; /* Lebar baru yang kecil */
+            }
+            .sidebar-closed .content {
+                padding-left: 80px; /* Offset konten baru */
+            }
+            
+            /* Sembunyikan label, biarkan ikon */
+            .sidebar-closed .nav-label {
+                opacity: 0;
+                width: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                display: none; /* Paksa hilang agar lebar benar-benar 0 */
+            }
+            .sidebar-closed #sidebar-title,
+            .sidebar-closed #sidebar-subtitle {
+                display: none;
+            }
+            /* Posisi tengah ikon */
+            .sidebar-closed .nav-item {
+                justify-content: center;
+                padding: 0.75rem 0.5rem;
+            }
+            .sidebar-closed .nav-item i {
+                margin-right: 0 !important;
+            }
+            .sidebar-closed .sidebar-footer {
+                 display: none; /* Sembunyikan footer di mode sempit */
+            }
+            .sidebar-closed #add-item-btn {
+                padding: 0.75rem 0.5rem; /* Sesuaikan padding tombol add */
+                justify-content: center;
+            }
+            .sidebar-closed #add-item-btn .nav-label {
+                display: none;
+            }
+        }
+        
+        /* General Navigation Item Styling */
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            overflow: hidden; /* Penting untuk transisi lebar */
+        }
+        .nav-item:hover {
+            background-color: #f3f4f6;
+        }
+        .nav-item.active {
+            background-color: #2563EB;
+            color: white;
+            font-weight: 600;
+        }
+        .nav-item.active:hover {
+            background-color: #1D4ED8;
+        }
+        
+        #reader {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .html5-qrcode-element {
+            /* Fix scanner view inside Tailwind layout */
+            margin-top: 1rem !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex flex-col md:flex-row min-h-screen sidebar-open">
+
+    <nav id="sidebar" class="sidebar bg-white shadow-xl md:shadow-none md:fixed md:h-full p-4 flex flex-col justify-between">
+        
+        <div class="md:block flex justify-between items-center w-full mb-4 md:mb-0">
+            <div class="flex-grow">
+                <h1 id="sidebar-title" class="text-2xl font-extrabold text-blue-600 hidden md:block">E-IMS</h1>
+                <h2 id="sidebar-subtitle" class="text-sm text-gray-500 hidden md:block">Inventory Komponen Elektronik</h2>
+            </div>
+            <button id="sidebar-toggle-btn" class="hidden md:block p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
+                 <i id="toggle-icon" data-lucide="chevrons-left" class="w-6 h-6"></i>
+            </button>
+            <div class="md:hidden flex justify-around items-center w-full">
+                </div>
+        </div>
+
+        <hr class="my-4 hidden md:block">
+        
+        <div class="flex md:flex-col justify-around md:justify-start w-full md:w-auto space-x-0 md:space-x-0 md:space-y-2 flex-grow">
+            <div id="nav-dashboard" class="nav-item active">
+                <i data-lucide="layout-dashboard" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
+                <span class="nav-label">Dashboard</span>
+            </div>
+            <div id="nav-list" class="nav-item">
+                <i data-lucide="package-search" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
+                <span class="nav-label">Daftar Inventaris</span>
+            </div>
+            <div id="nav-scan" class="nav-item">
+                <i data-lucide="scan" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
+                <span class="nav-label">Scan Barcode</span>
+            </div>
+            <button id="add-item-btn" class="nav-item text-blue-600 hover:text-white border-2 border-blue-600 hover:bg-blue-600 bg-white md:mt-4">
+                <i data-lucide="plus-circle" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
+                <span class="nav-label">Tambah Komponen</span>
+            </button>
+        </div>
+
+        <div class="hidden md:block border-t pt-4 text-center sidebar-footer">
+            <p class="text-xs text-gray-700 font-semibold truncate" id="user-info"></p>
+            <button id="logout-btn" class="text-xs text-red-500 hover:text-red-700 mt-1 flex items-center mx-auto">
+                <i data-lucide="log-out" class="w-4 h-4 mr-1"></i> <span id="logout-btn-text">Logout</span>
+            </button>
+        </div>
+    </nav>
+    
+    <main class="content flex-grow p-4 md:p-8">
+        
+        <div id="login-view" class="app-view hidden max-w-sm mx-auto my-10 p-6 bg-white shadow-xl rounded-xl">
+            <h2 class="text-3xl font-bold text-center text-blue-600 mb-6">Login E-IMS</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="login-email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" value="teknisi@mail.com">
+                </div>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="login-password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" value="password123">
+                </div>
+                <button id="login-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Login
+                </button>
+                <button id="register-btn" class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md shadow-sm text-sm font-medium text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Register (Buat Akun Baru)
+                </button>
+                
+                <hr class="my-4">
+                
+                <button id="toggle-config-btn" class="w-full text-xs text-gray-500 hover:text-gray-800 transition flex items-center justify-center">
+                    <i data-lucide="settings" class="w-4 h-4 inline mr-1"></i> Konfigurasi Lanjut
+                </button>
+
+                <div id="firebase-config-form" class="hidden border border-gray-200 p-4 rounded-lg bg-gray-50 space-y-3">
+                    <p class="text-sm font-bold text-gray-700">Ganti Konfigurasi Firebase</p>
+                    <div>
+                        <label for="config-apikey" class="block text-xs font-medium text-gray-600">API Key <span class="text-red-500">*</span></label>
+                        <input type="text" id="config-apikey" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <label for="config-projectid" class="block text-xs font-medium text-gray-600">Project ID <span class="text-red-500">*</span></label>
+                        <input type="text" id="config-projectid" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <label for="config-authdomain" class="block text-xs font-medium text-gray-600">Auth Domain (Opsional)</label>
+                        <input type="text" id="config-authdomain" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <button id="save-config-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-500 hover:bg-red-600">
+                        Simpan & Muat Ulang
+                    </button>
+                    <p class="text-xs text-red-400 text-center">* Menyimpan konfigurasi akan me-refresh aplikasi.</p>
+                </div>
+
+            </div>
+        </div>
+
+        <div id="dashboard-view" class="app-view hidden">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">Dashboard Inventaris</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-500">
+                    <p class="text-sm font-medium text-gray-500">Total Jenis Komponen</p>
+                    <p id="total-items" class="text-4xl font-extrabold text-gray-900 mt-1">0</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border-l-4 border-green-500">
+                    <p class="text-sm font-medium text-gray-500">Total Kuantitas Stok</p>
+                    <p id="total-stock" class="text-4xl font-extrabold text-gray-900 mt-1">0</p>
+                </div>
+                <div id="low-stock-alert" class="bg-red-50 p-6 rounded-xl shadow-md border-l-4 border-red-500 hidden">
+                    <p class="text-sm font-medium text-red-700">Peringatan Stok Menipis</p>
+                    <p id="low-stock-count" class="text-4xl font-extrabold text-red-600 mt-1">0</p>
+                    <p class="text-xs text-red-500 mt-2">Segera lakukan pembelian ulang.</p>
+                </div>
+            </div>
+
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Daftar Stok Menipis</h3>
+            <div class="bg-white p-4 rounded-xl shadow-md">
+                <ul id="low-stock-list" class="space-y-2">
+                    </ul>
+            </div>
+        </div>
+
+        <div id="list-view" class="app-view hidden">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">Daftar Semua Komponen</h2>
+            
+            <div class="mb-6">
+                <input type="text" id="search-input" placeholder="Cari: Nama, Value, Package, Lokasi, Kode Barang..." 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 transition">
+            </div>
+
+            <div id="inventory-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                </div>
+        </div>
+
+        <div id="detail-view" class="app-view hidden">
+            <button onclick="showView('list')" class="text-blue-600 hover:text-blue-800 flex items-center mb-4">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Kembali ke Daftar
+            </button>
+
+            <div class="bg-white p-6 rounded-xl shadow-xl">
+                <div class="md:flex md:space-x-8">
+                    <div class="md:w-1/2">
+                        <h2 id="detail-name" class="text-4xl font-extrabold text-gray-900 mb-4">Nama Komponen</h2>
+                        <div class="flex items-center space-x-4 mb-6">
+                            <img id="detail-photo" src="https://placehold.co/100x100/A0A0A0/ffffff?text=E-Comp" alt="Foto Komponen" class="w-24 h-24 object-cover rounded-lg border">
+                            <div>
+                                <p class="text-sm text-gray-500">Stok Saat Ini:</p>
+                                <p class="text-5xl font-extrabold text-green-600">
+                                    <span id="detail-stock">0</span> 
+                                    <span id="detail-unit" class="text-xl font-semibold">pcs</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Kode Barang:</span> <span id="detail-id" class="font-mono bg-gray-100 p-1 rounded"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Spesifikasi/Value:</span> <span id="detail-value"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Package:</span> <span id="detail-package"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Lokasi:</span> <span id="detail-location" class="bg-blue-100 p-1 rounded font-semibold"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Minimum Stok:</span> <span id="detail-minstock"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Merek:</span> <span id="detail-brand"></span></p>
+                        </div>
+                        
+                        <div class="mt-8 flex space-x-4">
+                            <button id="stock-in-btn" class="flex-1 py-3 px-4 rounded-xl text-white bg-green-600 hover:bg-green-700 font-semibold transition">
+                                <i data-lucide="plus" class="w-5 h-5 inline mr-1"></i> Stok Masuk
+                            </button>
+                            <button id="stock-out-btn" class="flex-1 py-3 px-4 rounded-xl text-white bg-red-600 hover:bg-red-700 font-semibold transition">
+                                <i data-lucide="minus" class="w-5 h-5 inline mr-1"></i> Stok Keluar
+                            </button>
+                        </div>
+                        <div class="mt-4 flex space-x-4">
+                            <button id="edit-item-btn" class="flex-1 py-2 px-4 rounded-xl text-blue-600 bg-blue-100 hover:bg-blue-200 font-semibold transition">Edit Data</button>
+                            <button id="delete-item-btn" class="flex-1 py-2 px-4 rounded-xl text-red-600 bg-red-100 hover:bg-red-200 font-semibold transition">Hapus Komponen</button>
+                        </div>
+                    </div>
+
+                    <div class="md:w-1/2 mt-8 md:mt-0">
+                        <div id="barcode-display">
+                            </div>
+
+                        <h3 class="text-xl font-bold text-gray-800 mt-6 mb-3 border-t pt-4">Riwayat Pergerakan Stok</h3>
+                        <div id="item-history" class="max-h-96 overflow-y-auto border rounded-lg bg-gray-50">
+                            </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="scan-view" class="app-view hidden text-center">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">Pemindai Barcode Cepat</h2>
+            <p class="text-gray-600 mb-4">Gunakan kamera perangkat untuk memindai Barcode (Code-128) atau QR Code.</p>
+            
+            <div id="reader" class="bg-gray-200 rounded-xl p-4 shadow-inner max-w-lg mx-auto">
+                </div>
+
+            <div id="scanner-result" class="mt-4 p-4 max-w-lg mx-auto bg-white rounded-xl shadow">
+                <p class="text-gray-500">Menunggu kamera...</p>
+            </div>
+
+            <button onclick="stopScanner(); showView('list')" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
+                <i data-lucide="x" class="w-5 h-5 inline mr-1"></i> Tutup Scanner
+            </button>
+        </div>
+
+    </main>
+
+    <div id="item-form-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 id="item-form-title" class="text-2xl font-bold text-blue-600">Tambah Komponen Baru</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            
+            <div class="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Kode Barang <span class="text-red-500">*</span></label>
+                    <input type="text" id="item-id" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: R0603-10K">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nama Komponen <span class="text-red-500">*</span></label>
+                    <input type="text" id="item-name" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: Resistor Film Tipis">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Kategori</label>
+                        <select id="item-category" class="mt-1 block w-full border border-gray-300 rounded-md p-2">
+                            <option>Resistor</option>
+                            <option>Kapasitor</option>
+                            <option>Induktor</option>
+                            <option>IC</option>
+                            <option>Transistor</option>
+                            <option>Sensor</option>
+                            <option>Lainnya</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Spesifikasi/Value <span class="text-red-500">*</span></label>
+                        <input type="text" id="item-value" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: 10k ohm 1%, 47uF 50V">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Package</label>
+                        <input type="text" id="item-package" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: SMD 0603, DIP-8, TO-220">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Merek</label>
+                        <input type="text" id="item-brand" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: Texas Instruments">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Lokasi <span class="text-red-500">*</span></label>
+                        <input type="text" id="item-location" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: Rak A1-05">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Minimum Stok</label>
+                        <input type="number" id="item-minstock" class="mt-1 block w-full border border-gray-300 rounded-md p-2" min="0" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Satuan</label>
+                        <input type="text" id="item-unit" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: pcs, strip, reel" value="pcs">
+                    </div>
+                </div>
+                 <div>
+                    <label class="block text-sm font-medium text-gray-700">Konten Barcode (QR/Code-128)</label>
+                    <input type="text" id="item-barcode" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Default: Kode Barang. Isi jika berbeda.">
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="close-modal-btn py-2 px-4 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold">Batal</button>
+                <button id="save-item-btn" class="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">Simpan Komponen</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="stock-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 id="stock-title" class="text-2xl font-bold text-blue-600">Stok Masuk</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            
+            <p class="text-lg font-semibold mb-2">Komponen: <span id="stock-component-name" class="text-gray-700"></span></p>
+            <p class="text-sm text-gray-500 mb-4">Stok saat ini: <span id="stock-current-stock" class="font-bold"></span></p>
+
+            <input type="hidden" id="stock-type" value="IN">
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Kuantitas <span class="text-red-500">*</span></label>
+                    <input type="number" id="stock-quantity" class="mt-1 block w-full border border-gray-300 rounded-md p-2" min="1" placeholder="Masukkan jumlah stok">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Catatan (Keperluan / Proyek)</label>
+                    <textarea id="stock-notes" class="mt-1 block w-full border border-gray-300 rounded-md p-2" rows="3" placeholder="Cth: Proyek 'Smart Home', Pembelian dari Supplier X"></textarea>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="close-modal-btn py-2 px-4 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold">Batal</button>
+                <button id="save-stock-btn" class="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">Proses Transaksi</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="message-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <h3 id="modal-title" class="text-2xl font-bold text-gray-800 mb-3">Pesan</h3>
+            <p id="modal-message" class="text-gray-600 mb-6">Pesan di sini.</p>
+            <button id="message-modal-close-btn" class="py-2 px-6 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">Tutup</button>
+        </div>
+    </div>
+
+    <script>
+        // Memastikan Lucide Icons dibuat setelah DOM dimuat
+        lucide.createIcons();
+    </script>
+    
+</body>
+</html>
