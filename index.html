@@ -485,21 +485,87 @@
             }
         };
         
+        // --- Fungsi Cetak Label Barcode ---
+        const printBarcodeLabel = (printElementId) => {
+            const printContent = getEl(printElementId);
+            
+            if (!printContent) {
+                showMessageModal('Gagal Mencetak', 'Elemen cetak tidak ditemukan.');
+                return;
+            }
+            
+            // Cek status toggle untuk menyembunyikan/menampilkan nama/id
+            const nameToggle = getEl('toggle-print-name');
+            const printNameEl = document.querySelector(`#${printElementId} .print-name`);
+            const printIdEl = document.querySelector(`#${printElementId} .print-id`);
+
+            // Simpan status display asli sebelum mencetak
+            const originalPrintNameDisplay = printNameEl ? printNameEl.style.display : 'block';
+            const originalPrintIdDisplay = printIdEl ? printIdEl.style.display : 'block';
+            
+            // Terapkan visibility untuk cetak (jika toggle tidak aktif, sembunyikan)
+            if (nameToggle && !nameToggle.checked) {
+                if (printNameEl) printNameEl.style.display = 'none';
+                if (printIdEl) printIdEl.style.display = 'none';
+            } else {
+                 // Pastikan terlihat jika toggle aktif
+                if (printNameEl) printNameEl.style.display = 'block';
+                if (printIdEl) printIdEl.style.display = 'block';
+            }
+            
+            // Bungkus konten dalam div temporer
+            const tempDiv = document.createElement('div');
+            tempDiv.className = 'print-label-container'; // Class ini akan diisolasi oleh CSS @media print
+            tempDiv.innerHTML = printContent.innerHTML;
+            
+            // Sisipkan div temporer ini ke body sebelum mencetak
+            document.body.appendChild(tempDiv);
+            
+            // 4. Panggil dialog cetak
+            window.print();
+            
+            // 5. Bersihkan/Kembalikan body setelah cetak
+            setTimeout(() => {
+                // Hapus div temporer
+                document.body.removeChild(tempDiv);
+                
+                // Kembalikan status display asli
+                if (printNameEl) printNameEl.style.display = originalPrintNameDisplay;
+                if (printIdEl) printIdEl.style.display = originalPrintIdDisplay;
+                
+            }, 100); 
+        };
+        
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
         // Menggunakan JsBarcode (via CDN) untuk merender Code-128
-        const generateBarcodeDisplay = (content, name) => {
+        const generateBarcodeDisplay = (content, name, itemId) => { // Tambahkan itemId
             // ID unik untuk elemen SVG barcode agar bisa dirender oleh JsBarcode
             const barcodeId = `barcode-${selectedComponentId || Date.now()}`; 
+            const printContainerId = `print-label-${selectedComponentId || Date.now()}`;
             
             // String HTML untuk tampilan Barcode (SVG)
-            // *QR Code placeholder telah dihapus*
             const displayHtml = `
-                <div class="p-4 bg-white border border-gray-300 rounded-lg text-center mt-4">
+                <div class="p-4 bg-white border border-gray-300 rounded-lg mt-4" id="barcode-container">
                     <h4 class="font-bold text-gray-700 mb-2">Barcode (Code-128)</h4>
                     
-                    <svg id="${barcodeId}" class="mx-auto"></svg>
-                    
-                    <p class="mt-1 text-base font-semibold text-gray-800">${name}</p>
+                    <div id="${printContainerId}" class="print-label-container flex flex-col justify-center items-center p-1 border-2 border-dashed border-gray-400">
+                        <p class="print-id text-sm font-mono text-gray-800 hidden">${itemId}</p>
+                        <svg id="${barcodeId}" class="mx-auto my-0"></svg>
+                        <p class="print-name text-base font-semibold text-gray-800">${name}</p>
+                    </div>
+
+                    <div class="mt-4 flex flex-col items-center border-t pt-3 space-y-2">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggle-print-name" checked class="sr-only peer">
+                            <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            <span class="ms-3 text-sm font-medium text-gray-900">Sertakan Nama/ID Barang pada Label</span>
+                        </label>
+                        
+                        <button id="print-barcode-btn" class="w-full max-w-xs py-2 px-4 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 font-semibold transition flex items-center justify-center">
+                            <i data-lucide="printer" class="w-5 h-5 inline mr-2"></i> Cetak Label (32x64mm)
+                        </button>
+                    </div>
+
                 </div>
             `;
 
@@ -511,12 +577,40 @@
                     try {
                         window.JsBarcode(`#${barcodeId}`, content, {
                             format: "CODE128", // Format Code-128
-                            displayValue: true,
+                            displayValue: false, // JANGAN tampilkan di sini, karena teks akan dihandle terpisah
                             width: 2,
-                            height: 50,
-                            margin: 10
+                            height: 40, // Sedikit lebih pendek
+                            margin: 0, // Margin harus 0 agar pas
+                            fontSize: 10,
                         });
                         console.log('Barcode rendered successfully for content:', content);
+
+                        // Attach print handler after DOM update
+                        const printButton = getEl('print-barcode-btn');
+                        if (printButton) {
+                            printButton.onclick = () => printBarcodeLabel(printContainerId);
+                            // Ensure Lucide icons are rendered for the button
+                            lucide.createIcons();
+                        }
+                        
+                        // Attach toggle handler
+                        const nameToggle = getEl('toggle-print-name');
+                        const printNameEl = document.querySelector(`#${printContainerId} .print-name`);
+                        const printIdEl = document.querySelector(`#${printContainerId} .print-id`);
+
+                        if (nameToggle) {
+                            // Handler untuk toggle
+                            nameToggle.onchange = (e) => {
+                                // Toggle visibility in the detail view
+                                if (printNameEl) printNameEl.classList.toggle('hidden', !e.target.checked);
+                                if (printIdEl) printIdEl.classList.toggle('hidden', !e.target.checked);
+                            };
+                            // Apply initial state based on 'checked'
+                            if (printNameEl) printNameEl.classList.toggle('hidden', !nameToggle.checked);
+                            if (printIdEl) printIdEl.classList.toggle('hidden', !nameToggle.checked);
+                        }
+
+
                     } catch (e) {
                         console.error("Gagal merender Barcode:", e);
                         svgElement.innerHTML = `<p class="text-red-500 text-sm">Error saat merender barcode: ${e.message}</p>`;
@@ -765,8 +859,9 @@
             getEl('detail-minstock').textContent = item.minStock || 0;
             getEl('detail-photo').src = item.photoUrl;
 
-            // Barcode Display
-            getEl('barcode-display').innerHTML = generateBarcodeDisplay(item.barcodeContent, item.name);
+            // Barcode Display (Pass itemId as well)
+            getEl('barcode-display').innerHTML = generateBarcodeDisplay(item.barcodeContent, item.name, item.itemId);
+            
             // Button Edit & Delete
             getEl('edit-item-btn').onclick = () => openItemFormModal('edit', item);
             getEl('delete-item-btn').onclick = () => deleteComponent(item.id);
@@ -970,6 +1065,62 @@
         .content {
             transition: padding-left 0.3s ease;
         }
+        
+        /* Custom Print Style for Barcode Label (32mm x 64mm) */
+        @page {
+            /* Landscape: width 64mm, height 32mm */
+            size: 64mm 32mm; 
+            margin: 0;
+        }
+        
+        @media print {
+            /* Sembunyikan semua elemen kecuali container label untuk cetak */
+            body > *:not(.print-label-container) {
+                display: none !important;
+            }
+            .print-label-container {
+                display: flex !important;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                /* Ukuran kertas */
+                width: 64mm; 
+                height: 32mm;
+                /* Reset standard print styles */
+                margin: 0;
+                padding: 1mm; /* Padding kecil agar tidak terlalu mepet tepi */
+                box-sizing: border-box;
+            }
+            /* Styling untuk SVG Barcode di mode cetak */
+            .print-label-container svg {
+                max-width: 60mm;
+                height: 20mm; /* Atur ketinggian barcode */
+                margin-top: 0;
+            }
+            /* Styling untuk Nama/ID Barang di mode cetak */
+            .print-label-container .print-name {
+                font-size: 8pt; /* Ukuran font kecil untuk nama */
+                line-height: 1.1;
+                margin-top: 1mm;
+                font-weight: bold;
+                text-align: center;
+                white-space: nowrap;
+                overflow: hidden;
+            }
+             .print-label-container .print-id {
+                font-size: 7pt; /* Ukuran font lebih kecil untuk ID */
+                line-height: 1;
+                text-align: center;
+                margin-bottom: 0;
+                font-family: monospace;
+            }
+            /* Force the element to the top of the page */
+            html, body {
+                height: 100%;
+                overflow: hidden;
+            }
+        }
+
 
         /* Responsive for mobile (Sidebar becomes bottom bar) */
         @media (max-width: 768px) {
