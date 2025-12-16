@@ -550,7 +550,7 @@
             html5QrcodeScanner = new Html5Qrcode("reader");
             
             const onScanSuccess = (decodedText, decodedResult) => {
-                stopScanner();
+               // stopScanner();
                 handleScannedBarcode(decodedText);
             };
 
@@ -594,6 +594,7 @@
         };
         
         const handleScannedBarcode = (barcode) => {
+            stopScanner();
             getEl('scanner-result').innerHTML = `<p class="text-green-600 font-bold">Kode terdeteksi: ${barcode}. Mencari data...</p>`;
             
             const component = inventory.find(i => i.barcodeContent === barcode);
@@ -1358,3 +1359,4 @@
     
 </body>
 </html>
+
