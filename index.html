@@ -75,10 +75,20 @@
             padding-left: 4rem;
         }
         
-        /* Ensure print-label-container is hidden normally */
+        /* ---------------------------------------------------- */
+        /* START: PRINT FIX STYLES */
+        /* Ensure print-label-container (used dynamically) is hidden normally */
         .print-label-container {
-            display: none;
+             display: none;
         }
+        
+        /* New element to hold print content, hidden normally */
+        #print-area-container {
+            display: none; 
+        }
+        /* END: PRINT FIX STYLES */
+        /* ---------------------------------------------------- */
+
 
         /* Custom Print Style for Barcode Label (32mm x 64mm) */
         @page {
@@ -88,36 +98,58 @@
         }
 
         @media print {
-            /* PERBAIKAN KRUSIAL: Baris konflik ini dihilangkan */
-            /* body > *:not(.print-label-container) { display: none !important; } */
+            /* 1. HIDE the entire application UI wrapper */
+            #app-wrapper {
+                display: none !important; 
+            }
 
-            .print-label-container {
-                /* Tampilkan container saat mode cetak */
+            /* 2. SHOW the temporary print container */
+            #print-area-container {
                 display: flex !important;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
+                position: absolute;
+                top: 0;
+                left: 0;
                 /* Ukuran kertas */
                 width: 64mm; 
                 height: 32mm;
                 /* Reset standard print styles */
                 margin: 0;
                 padding: 1mm; 
-                /* Padding kecil agar tidak terlalu mepet tepi */
                 box-sizing: border-box;
-                page-break-after: always; /* Jika mencetak beberapa label sekaligus */
+                page-break-after: always; 
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            /* 3. Apply styles to the dynamic content inside the container */
+            #print-area-container .print-label-container {
+                /* Tampilkan inner container saat mode cetak */
+                display: flex !important;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                /* Ukuran kertas */
+                width: 100%; 
+                height: 100%;
+                /* Reset border/padding for actual print */
+                margin: 0;
+                padding: 0; 
+                border: none;
+                box-sizing: border-box;
             }
 
+
             /* Styling untuk SVG Barcode di mode cetak */
-            .print-label-container svg {
+            #print-area-container svg {
                 max-width: 60mm;
-                height: 20mm; /* Atur ketinggian barcode */
+                height: 20mm; 
                 margin-top: 0;
             }
 
             /* Styling untuk Nama/ID Barang di mode cetak */
-            .print-label-container .print-name {
-                font-size: 8pt; /* Ukuran font kecil untuk nama */
+            #print-area-container .print-name {
+                font-size: 8pt; 
                 line-height: 1.1;
                 margin-top: 1mm;
                 font-weight: bold;
@@ -125,8 +157,8 @@
                 white-space: nowrap;
                 overflow: hidden;
             }
-             .print-label-container .print-id {
-                font-size: 7pt; /* Ukuran font lebih kecil untuk ID */
+             #print-area-container .print-id {
+                font-size: 7pt; 
                 line-height: 1;
                 text-align: center;
                 margin-bottom: 0;
@@ -188,235 +220,237 @@
 </head>
 <body class="bg-gray-50 sidebar-open">
 
-    <nav id="sidebar" class="sidebar flex flex-col justify-between bg-white border-r border-gray-200 shadow-md md:shadow-none">
-        <div>
-            <div class="logo flex items-center p-4">
-                <i data-lucide="archive" class="w-6 h-6 text-indigo-600"></i>
-                <span class="logo-text text-xl font-bold ml-3 text-gray-800">E-IMS</span>
-            </div>
+    <div id="app-wrapper">
 
-            <div class="mt-6 flex flex-col space-y-1">
-                <a id="nav-dashboard" class="nav-item active" href="javascript:void(0)">
-                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-                    <span class="nav-text ml-3">Dashboard</span>
-                </a>
-                <a id="nav-list" class="nav-item" href="javascript:void(0)">
-                    <i data-lucide="list-ordered" class="w-5 h-5"></i>
-                    <span class="nav-text ml-3">Inventaris</span>
-                </a>
-                <a id="nav-scan" class="nav-item" href="javascript:void(0)">
-                    <i data-lucide="scan-barcode" class="w-5 h-5"></i>
-                    <span class="nav-text ml-3">Scan Barcode</span>
-                </a>
-            </div>
-        </div>
-
-        <div class="p-4 border-t border-gray-200">
-            <div class="footer-info text-xs text-gray-500 mb-2">
-                User: <span id="user-info" class="font-semibold text-gray-700">Loading...</span>
-            </div>
-            <div class="flex flex-col space-y-2">
-                <button id="logout-btn" class="w-full py-2 px-3 rounded-lg text-sm text-red-600 bg-red-50 hover:bg-red-100 transition flex items-center justify-center">
-                    <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>
-                    <span class="nav-text">Logout</span>
-                </button>
-                <button id="toggle-config-btn" class="w-full py-2 px-3 rounded-lg text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center">
-                    <i data-lucide="settings" class="w-4 h-4 inline mr-1" id="toggle-config-icon"></i> 
-                    <span class="nav-text">Konfigurasi Lanjut</span>
-                </button>
-            </div>
-        </div>
-    </nav>
-
-    <div id="main-container" class="main-container">
-        <header class="sticky top-0 bg-white p-4 border-b border-gray-200 flex justify-between items-center z-10">
-            <h1 id="app-title" class="text-2xl font-bold text-gray-800">E-IMS</h1>
-            <div class="flex items-center space-x-4">
-                <button id="sidebar-toggle-btn" class="sidebar-toggle-btn p-2 rounded-full hover:bg-gray-100 transition hidden md:block">
-                    <i data-lucide="chevrons-left" class="w-6 h-6 text-gray-600" id="toggle-icon"></i>
-                </button>
-                
-                <button id="add-item-btn" class="py-2 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition flex items-center">
-                    <i data-lucide="plus" class="w-5 h-5 mr-1"></i>
-                    <span class="hidden sm:inline">Tambah Barang</span>
-                </button>
-            </div>
-        </header>
-
-        <div id="firebase-config-form" class="hidden p-4 bg-yellow-50 border-y border-yellow-200">
-             <h3 class="text-lg font-bold text-yellow-800 mb-3">Konfigurasi Firebase</h3>
-             <p class="text-sm text-yellow-700 mb-4">Gunakan ini hanya jika Anda ingin menghubungkan aplikasi ke proyek Firebase Anda sendiri. Setelah disimpan, aplikasi akan dimuat ulang.</p>
-             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                 <div>
-                    <label class="block text-sm font-medium text-gray-700">API Key</label>
-                    <input type="text" id="config-apikey" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="AIzaSy...">
-                 </div>
-                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Auth Domain</label>
-                    <input type="text" id="config-authdomain" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="[project-id].firebaseapp.com">
-                 </div>
-                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Project ID</label>
-                    <input type="text" id="config-projectid" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="your-project-id">
-                 </div>
-             </div>
-             <div class="mt-4 flex justify-end">
-                <button id="save-config-btn" class="py-2 px-4 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white font-semibold">Simpan & Muat Ulang</button>
-             </div>
-        </div>
-
-        <main class="p-4 md:p-8">
-
-            <div id="login-view" class="app-view hidden max-w-lg mx-auto bg-white p-8 shadow-xl rounded-xl mt-16">
-                <h2 class="text-3xl font-extrabold text-indigo-600 mb-6 text-center">E-IMS Login</h2>
-                <p class="text-gray-600 mb-6 text-center">Silakan login atau register untuk mengakses inventaris.</p>
-                <div class="space-y-4">
-                    <div>
-                        <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
-                        <input type="email" id="login-email" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="contoh@domain.com">
-                    </div>
-                    <div>
-                        <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
-                        <input type="password" id="login-password" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="Minimal 6 karakter">
-                    </div>
-                </div>
-                <div class="mt-8 flex justify-between space-x-4">
-                    <button id="register-btn" class="w-1/2 py-3 px-4 border border-indigo-600 rounded-lg text-indigo-600 hover:bg-indigo-50 font-semibold transition">Register</button>
-                    <button id="login-btn" class="w-1/2 py-3 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition">Login</button>
-                </div>
-            </div>
-            
-            <div id="dashboard-view" class="app-view hidden">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6">Dashboard Inventaris</h2>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex items-center justify-between">
-                        <div>
-                            <p class="text-sm font-medium text-gray-500">Total Jenis Barang</p>
-                            <p id="total-items" class="text-4xl font-extrabold text-indigo-600 mt-1">0</p>
-                        </div>
-                        <i data-lucide="box" class="w-10 h-10 text-indigo-400 opacity-50"></i>
-                    </div>
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex items-center justify-between">
-                        <div>
-                            <p class="text-sm font-medium text-gray-500">Total Kuantitas Stok</p>
-                            <p id="total-stock" class="text-4xl font-extrabold text-green-600 mt-1">0</p>
-                        </div>
-                        <i data-lucide="package" class="w-10 h-10 text-green-400 opacity-50"></i>
-                    </div>
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex items-center justify-between">
-                        <div>
-                            <p class="text-sm font-medium text-gray-500">Barang Stok Minimum</p>
-                            <p id="low-stock-count" class="text-4xl font-extrabold text-red-600 mt-1">0</p>
-                        </div>
-                        <i data-lucide="alert-triangle" class="w-10 h-10 text-red-400 opacity-50"></i>
-                    </div>
+        <nav id="sidebar" class="sidebar flex flex-col justify-between bg-white border-r border-gray-200 shadow-md md:shadow-none">
+            <div>
+                <div class="logo flex items-center p-4">
+                    <i data-lucide="archive" class="w-6 h-6 text-indigo-600"></i>
+                    <span class="logo-text text-xl font-bold ml-3 text-gray-800">E-IMS</span>
                 </div>
 
-                <div id="low-stock-alert" class="hidden bg-red-50 p-6 rounded-xl border border-red-200">
-                    <h3 class="text-xl font-bold text-red-800 mb-4 flex items-center">
-                        <i data-lucide="alert-circle" class="w-6 h-6 mr-2"></i> Peringatan Stok Minimum
-                    </h3>
-                    <ul id="low-stock-list" class="space-y-3">
-                        </ul>
+                <div class="mt-6 flex flex-col space-y-1">
+                    <a id="nav-dashboard" class="nav-item active" href="javascript:void(0)">
+                        <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                        <span class="nav-text ml-3">Dashboard</span>
+                    </a>
+                    <a id="nav-list" class="nav-item" href="javascript:void(0)">
+                        <i data-lucide="list-ordered" class="w-5 h-5"></i>
+                        <span class="nav-text ml-3">Inventaris</span>
+                    </a>
+                    <a id="nav-scan" class="nav-item" href="javascript:void(0)">
+                        <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+                        <span class="nav-text ml-3">Scan Barcode</span>
+                    </a>
                 </div>
             </div>
 
-            <div id="list-view" class="app-view hidden">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6">Daftar Inventaris Komponen</h2>
-                
-                <div class="mb-6">
-                    <input type="text" id="search-input" placeholder="Cari berdasarkan nama, nilai, package, atau lokasi..." class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <div class="p-4 border-t border-gray-200">
+                <div class="footer-info text-xs text-gray-500 mb-2">
+                    User: <span id="user-info" class="font-semibold text-gray-700">Loading...</span>
                 </div>
-
-                <div id="inventory-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    </div>
-            </div>
-            
-            <div id="detail-view" class="app-view hidden">
-                <button id="back-to-list-btn" class="text-indigo-600 hover:text-indigo-800 font-semibold mb-4 flex items-center">
-                    <i data-lucide="arrow-left" class="w-5 h-5 mr-2"></i> Kembali ke Daftar
-                </button>
-                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                    <div class="flex flex-col lg:flex-row gap-6">
-                        <div class="lg:w-1/3 flex flex-col items-center">
-                            <img id="detail-photo" src="https://placehold.co/150x150/A0A0A0/ffffff?text=E-Comp" alt="Foto Komponen" class="w-32 h-32 object-cover rounded-md mb-4 border border-gray-200">
-                            
-                            <h3 class="text-lg font-semibold text-gray-700">Stok Tersedia</h3>
-                            <p class="text-5xl font-extrabold text-green-600 mt-1 mb-4">
-                                <span id="detail-stock">0</span>
-                                <span id="detail-unit" class="text-2xl font-bold text-gray-600 ml-1">pcs</span>
-                            </p>
-                            
-                            <div class="flex space-x-3 w-full max-w-xs">
-                                <button id="stock-in-btn" class="w-1/2 py-2 rounded-lg text-white bg-green-600 hover:bg-green-700 font-semibold transition flex items-center justify-center">
-                                    <i data-lucide="arrow-down-to-line" class="w-5 h-5 mr-1"></i> Masuk
-                                </button>
-                                <button id="stock-out-btn" class="w-1/2 py-2 rounded-lg text-white bg-red-600 hover:bg-red-700 font-semibold transition flex items-center justify-center">
-                                    <i data-lucide="arrow-up-from-line" class="w-5 h-5 mr-1"></i> Keluar
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="lg:w-2/3">
-                            <div class="flex justify-between items-start border-b pb-4 mb-4">
-                                <div>
-                                    <h2 id="detail-name" class="text-3xl font-bold text-gray-800">Nama Komponen</h2>
-                                    <p class="text-sm font-mono text-gray-500 mt-1">Kode: <span id="detail-id">N/A</span></p>
-                                </div>
-                                <div class="flex space-x-2">
-                                    <button id="edit-item-btn" class="p-2 rounded-full text-indigo-600 hover:bg-indigo-100 transition">
-                                        <i data-lucide="pencil" class="w-5 h-5"></i>
-                                    </button>
-                                    <button id="delete-item-btn" class="p-2 rounded-full text-red-600 hover:bg-red-100 transition">
-                                        <i data-lucide="trash-2" class="w-5 h-5"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div class="grid grid-cols-2 gap-4 text-sm text-gray-700 mb-6">
-                                <div><span class="font-semibold text-gray-500">Nilai/Spesifikasi:</span> <p id="detail-value" class="font-medium"></p></div>
-                                <div><span class="font-semibold text-gray-500">Package/Tipe:</span> <p id="detail-package" class="font-medium"></p></div>
-                                <div><span class="font-semibold text-gray-500">Brand/Merek:</span> <p id="detail-brand" class="font-medium"></p></div>
-                                <div><span class="font-semibold text-gray-500">Lokasi Rak:</span> <p id="detail-location" class="font-medium"></p></div>
-                                <div><span class="font-semibold text-gray-500">Stok Minumun:</span> <p id="detail-minstock" class="font-medium"></p></div>
-                                <div><span class="font-semibold text-gray-500">Kategori:</span> <p id="detail-category" class="font-medium"></p></div>
-                            </div>
-
-                            <div id="barcode-display">
-                                </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-8 border-t pt-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-4">Riwayat Stok (50 Transaksi Terakhir)</h3>
-                        <div id="item-history" class="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-200">
-                            </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="scan-view" class="app-view hidden max-w-2xl mx-auto">
-                 <h2 class="text-3xl font-bold text-gray-800 mb-6">Scan Barcode / QR Code</h2>
-                 
-                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                     <div id="reader" class="w-full aspect-square border-4 border-dashed border-indigo-300 rounded-lg overflow-hidden">
-                         </div>
-                     <div id="scanner-result" class="text-center mt-4 p-3 bg-gray-100 rounded-lg">
-                        <p class="text-gray-500">Pemindai belum aktif.</p>
-                     </div>
-                 </div>
-                 
-                 <div class="mt-6 text-center">
-                    <button onclick="stopScanner(); showView('list');" class="py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition flex items-center justify-center mx-auto">
-                        <i data-lucide="x" class="w-5 h-5 mr-2"></i> Tutup Pemindai
+                <div class="flex flex-col space-y-2">
+                    <button id="logout-btn" class="w-full py-2 px-3 rounded-lg text-sm text-red-600 bg-red-50 hover:bg-red-100 transition flex items-center justify-center">
+                        <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>
+                        <span class="nav-text">Logout</span>
                     </button>
-                 </div>
+                    <button id="toggle-config-btn" class="w-full py-2 px-3 rounded-lg text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center">
+                        <i data-lucide="settings" class="w-4 h-4 inline mr-1" id="toggle-config-icon"></i> 
+                        <span class="nav-text">Konfigurasi Lanjut</span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div id="main-container" class="main-container">
+            <header class="sticky top-0 bg-white p-4 border-b border-gray-200 flex justify-between items-center z-10">
+                <h1 id="app-title" class="text-2xl font-bold text-gray-800">E-IMS</h1>
+                <div class="flex items-center space-x-4">
+                    <button id="sidebar-toggle-btn" class="sidebar-toggle-btn p-2 rounded-full hover:bg-gray-100 transition hidden md:block">
+                        <i data-lucide="chevrons-left" class="w-6 h-6 text-gray-600" id="toggle-icon"></i>
+                    </button>
+                    
+                    <button id="add-item-btn" class="py-2 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition flex items-center">
+                        <i data-lucide="plus" class="w-5 h-5 mr-1"></i>
+                        <span class="hidden sm:inline">Tambah Barang</span>
+                    </button>
+                </div>
+            </header>
+
+            <div id="firebase-config-form" class="hidden p-4 bg-yellow-50 border-y border-yellow-200">
+                <h3 class="text-lg font-bold text-yellow-800 mb-3">Konfigurasi Firebase</h3>
+                <p class="text-sm text-yellow-700 mb-4">Gunakan ini hanya jika Anda ingin menghubungkan aplikasi ke proyek Firebase Anda sendiri. Setelah disimpan, aplikasi akan dimuat ulang.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">API Key</label>
+                        <input type="text" id="config-apikey" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="AIzaSy...">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Auth Domain</label>
+                        <input type="text" id="config-authdomain" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="[project-id].firebaseapp.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Project ID</label>
+                        <input type="text" id="config-projectid" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="your-project-id">
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button id="save-config-btn" class="py-2 px-4 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white font-semibold">Simpan & Muat Ulang</button>
+                </div>
             </div>
 
-        </main>
-    </div>
+            <main class="p-4 md:p-8">
 
+                <div id="login-view" class="app-view hidden max-w-lg mx-auto bg-white p-8 shadow-xl rounded-xl mt-16">
+                    <h2 class="text-3xl font-extrabold text-indigo-600 mb-6 text-center">E-IMS Login</h2>
+                    <p class="text-gray-600 mb-6 text-center">Silakan login atau register untuk mengakses inventaris.</p>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" id="login-email" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="contoh@domain.com">
+                        </div>
+                        <div>
+                            <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" id="login-password" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="Minimal 6 karakter">
+                        </div>
+                    </div>
+                    <div class="mt-8 flex justify-between space-x-4">
+                        <button id="register-btn" class="w-1/2 py-3 px-4 border border-indigo-600 rounded-lg text-indigo-600 hover:bg-indigo-50 font-semibold transition">Register</button>
+                        <button id="login-btn" class="w-1/2 py-3 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition">Login</button>
+                    </div>
+                </div>
+                
+                <div id="dashboard-view" class="app-view hidden">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-6">Dashboard Inventaris</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Total Jenis Barang</p>
+                                <p id="total-items" class="text-4xl font-extrabold text-indigo-600 mt-1">0</p>
+                            </div>
+                            <i data-lucide="box" class="w-10 h-10 text-indigo-400 opacity-50"></i>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Total Kuantitas Stok</p>
+                                <p id="total-stock" class="text-4xl font-extrabold text-green-600 mt-1">0</p>
+                            </div>
+                            <i data-lucide="package" class="w-10 h-10 text-green-400 opacity-50"></i>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500">Barang Stok Minimum</p>
+                                <p id="low-stock-count" class="text-4xl font-extrabold text-red-600 mt-1">0</p>
+                            </div>
+                            <i data-lucide="alert-triangle" class="w-10 h-10 text-red-400 opacity-50"></i>
+                        </div>
+                    </div>
+
+                    <div id="low-stock-alert" class="hidden bg-red-50 p-6 rounded-xl border border-red-200">
+                        <h3 class="text-xl font-bold text-red-800 mb-4 flex items-center">
+                            <i data-lucide="alert-circle" class="w-6 h-6 mr-2"></i> Peringatan Stok Minimum
+                        </h3>
+                        <ul id="low-stock-list" class="space-y-3">
+                            </ul>
+                    </div>
+                </div>
+
+                <div id="list-view" class="app-view hidden">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-6">Daftar Inventaris Komponen</h2>
+                    
+                    <div class="mb-6">
+                        <input type="text" id="search-input" placeholder="Cari berdasarkan nama, nilai, package, atau lokasi..." class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+
+                    <div id="inventory-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        </div>
+                </div>
+                
+                <div id="detail-view" class="app-view hidden">
+                    <button id="back-to-list-btn" class="text-indigo-600 hover:text-indigo-800 font-semibold mb-4 flex items-center">
+                        <i data-lucide="arrow-left" class="w-5 h-5 mr-2"></i> Kembali ke Daftar
+                    </button>
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <div class="flex flex-col lg:flex-row gap-6">
+                            <div class="lg:w-1/3 flex flex-col items-center">
+                                <img id="detail-photo" src="https://placehold.co/150x150/A0A0A0/ffffff?text=E-Comp" alt="Foto Komponen" class="w-32 h-32 object-cover rounded-md mb-4 border border-gray-200">
+                                
+                                <h3 class="text-lg font-semibold text-gray-700">Stok Tersedia</h3>
+                                <p class="text-5xl font-extrabold text-green-600 mt-1 mb-4">
+                                    <span id="detail-stock">0</span>
+                                    <span id="detail-unit" class="text-2xl font-bold text-gray-600 ml-1">pcs</span>
+                                </p>
+                                
+                                <div class="flex space-x-3 w-full max-w-xs">
+                                    <button id="stock-in-btn" class="w-1/2 py-2 rounded-lg text-white bg-green-600 hover:bg-green-700 font-semibold transition flex items-center justify-center">
+                                        <i data-lucide="arrow-down-to-line" class="w-5 h-5 mr-1"></i> Masuk
+                                    </button>
+                                    <button id="stock-out-btn" class="w-1/2 py-2 rounded-lg text-white bg-red-600 hover:bg-red-700 font-semibold transition flex items-center justify-center">
+                                        <i data-lucide="arrow-up-from-line" class="w-5 h-5 mr-1"></i> Keluar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="lg:w-2/3">
+                                <div class="flex justify-between items-start border-b pb-4 mb-4">
+                                    <div>
+                                        <h2 id="detail-name" class="text-3xl font-bold text-gray-800">Nama Komponen</h2>
+                                        <p class="text-sm font-mono text-gray-500 mt-1">Kode: <span id="detail-id">N/A</span></p>
+                                    </div>
+                                    <div class="flex space-x-2">
+                                        <button id="edit-item-btn" class="p-2 rounded-full text-indigo-600 hover:bg-indigo-100 transition">
+                                            <i data-lucide="pencil" class="w-5 h-5"></i>
+                                        </button>
+                                        <button id="delete-item-btn" class="p-2 rounded-full text-red-600 hover:bg-red-100 transition">
+                                            <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-4 text-sm text-gray-700 mb-6">
+                                    <div><span class="font-semibold text-gray-500">Nilai/Spesifikasi:</span> <p id="detail-value" class="font-medium"></p></div>
+                                    <div><span class="font-semibold text-gray-500">Package/Tipe:</span> <p id="detail-package" class="font-medium"></p></div>
+                                    <div><span class="font-semibold text-gray-500">Brand/Merek:</span> <p id="detail-brand" class="font-medium"></p></div>
+                                    <div><span class="font-semibold text-gray-500">Lokasi Rak:</span> <p id="detail-location" class="font-medium"></p></div>
+                                    <div><span class="font-semibold text-gray-500">Stok Minumun:</span> <p id="detail-minstock" class="font-medium"></p></div>
+                                    <div><span class="font-semibold text-gray-500">Kategori:</span> <p id="detail-category" class="font-medium"></p></div>
+                                </div>
+
+                                <div id="barcode-display">
+                                    </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 border-t pt-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Riwayat Stok (50 Transaksi Terakhir)</h3>
+                            <div id="item-history" class="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-200">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="scan-view" class="app-view hidden max-w-2xl mx-auto">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-6">Scan Barcode / QR Code</h2>
+                    
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <div id="reader" class="w-full aspect-square border-4 border-dashed border-indigo-300 rounded-lg overflow-hidden">
+                            </div>
+                        <div id="scanner-result" class="text-center mt-4 p-3 bg-gray-100 rounded-lg">
+                            <p class="text-gray-500">Pemindai belum aktif.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 text-center">
+                        <button onclick="stopScanner(); showView('list');" class="py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition flex items-center justify-center mx-auto">
+                            <i data-lucide="x" class="w-5 h-5 mr-2"></i> Tutup Pemindai
+                        </button>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
     <div id="item-form-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" data-mode="add">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6">
             <h3 id="item-form-title" class="text-2xl font-bold text-gray-800 mb-4">Tambah Komponen Baru</h3>
@@ -521,6 +555,8 @@
             <button id="message-modal-close-btn" class="py-2 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition">Tutup</button>
         </div>
     </div>
+    
+    <div id="print-area-container" style="display: none;"></div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -1000,68 +1036,67 @@
             }
         };
         
-        // --- Fungsi Cetak Label Barcode (DIPERBAIKI) ---
+        // --- Fungsi Cetak Label Barcode (SUDAH DIPERBAIKI) ---
         const printBarcodeLabel = (printElementId) => {
             const printContent = getEl(printElementId);
-            if (!printContent) {
-                showMessageModal('Gagal Mencetak', 'Elemen cetak tidak ditemukan.');
+            // Elemen utama aplikasi dan kontainer cetak sementara
+            const appWrapper = getEl('app-wrapper');
+            const printAreaContainer = getEl('print-area-container');
+
+            if (!printContent || !appWrapper || !printAreaContainer) {
+                showMessageModal('Gagal Mencetak', 'Elemen cetak tidak ditemukan. Coba muat ulang halaman.');
                 return;
             }
             
-            // 1. Simpan Konten Body Asli SEBELUM perubahan
-            const originalBodyInnerHTML = document.body.innerHTML;
-            
-            // Cek status toggle untuk menyembunyikan/menampilkan nama/id
-            const nameToggle = getEl('toggle-print-name');
-            
-            // 2. Buat Konten Cetak (Gunakan container baru dan salin isinya)
+            // 1. Buat Konten Cetak (Gunakan container baru dan salin isinya)
             const tempDiv = document.createElement('div');
             tempDiv.className = 'print-label-container'; 
             tempDiv.innerHTML = printContent.innerHTML;
 
-            // Terapkan visibility ke salinan (berdasarkan toggle)
+            // Ambil status toggle dari elemen di detail-view
+            const nameToggle = getEl('toggle-print-name');
             const printNameEl = tempDiv.querySelector('.print-name');
             const printIdEl = tempDiv.querySelector('.print-id');
             const isNameVisible = nameToggle ? nameToggle.checked : true;
 
+            // Terapkan visibility ke salinan (berdasarkan toggle)
             if (printNameEl) printNameEl.style.display = isNameVisible ? 'block' : 'none';
             if (printIdEl) printIdEl.style.display = isNameVisible ? 'block' : 'none';
             
-            // 3. Ganti Konten Body hanya dengan konten cetak
-            document.body.innerHTML = ''; // Hapus semua konten UI
-            document.body.appendChild(tempDiv);
+            // 2. Masukkan konten cetak ke kontainer sementara
+            printAreaContainer.innerHTML = '';
+            printAreaContainer.appendChild(tempDiv);
             
+            // 3. Sembunyikan UI Aplikasi utama dan tampilkan kontainer cetak
+            appWrapper.style.display = 'none';
+            printAreaContainer.style.display = 'block';
+
             // 4. Panggil dialog cetak
             window.print();
             
-            // 5. Bersihkan/Kembalikan body setelah cetak
+            // 5. Bersihkan/Kembalikan UI setelah cetak
+            // Timeout adalah cara paling andal untuk menunggu dialog cetak ditutup
             setTimeout(() => {
-                // Kembalikan konten body asli
-                document.body.innerHTML = originalBodyInnerHTML;
+                // Sembunyikan kontainer cetak dan bersihkan
+                printAreaContainer.style.display = 'none';
+                printAreaContainer.innerHTML = '';
+                
+                // Tampilkan kembali UI Aplikasi utama
+                appWrapper.style.display = 'block';
 
-                // Render ulang icon Lucide (PENTING karena innerHTML diganti)
-                if (window.lucide && window.lucide.createIcons) {
-                     window.lucide.createIcons();
+                // KEMBALI KE DETAIL BARANG
+                showView('detail'); 
+                
+                // Perbarui status aktif navigasi (nav-list)
+                document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                const navItem = getEl(`nav-list`);
+                if (navItem) {
+                     navItem.classList.add('active');
                 }
                 
-                // Pasang ulang listeners dan render view
-                // Panggil initApp jika terdefinisi (asumsi ini me-re-attach semua listeners)
-                // Jika initApp tidak ada, kita panggil ulang listener yang penting
-                if (typeof initApp === 'function') {
-                    initApp();
-                }
-
-                // Panggil showView yang terakhir aktif
-                if (currentView) {
-                    // Panggil showView agar data di-render ulang
-                    showView(currentView);
-                    
-                    // Pastikan nav aktif kembali (Karena showView tidak selalu memanggil handleNavClick)
-                    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-                    const navItem = getEl(`nav-${currentView}`);
-                    if (navItem) {
-                         navItem.classList.add('active');
-                    }
+                // Render ulang icon Lucide (PENTING)
+                if (window.lucide && window.lucide.createIcons) {
+                     window.lucide.createIcons();
                 }
                 
             }, 500); // Penundaan 500ms
@@ -1069,18 +1104,19 @@
         
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
         // Menggunakan JsBarcode (via CDN) untuk merender Code-128
-        const generateBarcodeDisplay = (content, name, itemId) => { // Tambahkan itemId
+        const generateBarcodeDisplay = (content, name, itemId) => { // Pass itemId
             // ID unik untuk elemen SVG barcode agar bisa dirender oleh JsBarcode
             const barcodeId = `barcode-${selectedComponentId || Date.now()}`; 
             const printContainerId = `print-label-${selectedComponentId || Date.now()}`;
             
             // String HTML untuk tampilan Barcode (SVG)
+            // KONTEN CETAK HANYA BARCODE, NAMA, DAN ID
             const displayHtml = `
                 <div class="p-4 bg-white border border-gray-300 rounded-lg mt-4" id="barcode-container">
                     <h4 class="font-bold text-gray-700 mb-2">Barcode (Code-128)</h4>
                     
                     <div id="${printContainerId}" class="print-label-container flex flex-col justify-center items-center p-1 border-2 border-dashed border-gray-400">
-                        <p class="print-id text-sm font-mono text-gray-800 hidden">${itemId}</p>
+                        <p class="print-id text-sm font-mono text-gray-800">${itemId}</p>
                         <svg id="${barcodeId}" class="mx-auto my-0"></svg>
                         <p class="print-name text-base font-semibold text-gray-800">${name}</p>
                     </div>
@@ -1104,41 +1140,41 @@
             // Timeout 100ms digunakan untuk memastikan DOM telah diperbarui.
             setTimeout(() => {
                 const svgElement = getEl(barcodeId);
+                const printButton = getEl('print-barcode-btn');
+                const nameToggle = getEl('toggle-print-name');
+                const printNameEl = document.querySelector(`#${printContainerId} .print-name`);
+                const printIdEl = document.querySelector(`#${printContainerId} .print-id`);
+
                 if (svgElement && window.JsBarcode) {
                     try {
                         window.JsBarcode(`#${barcodeId}`, content, {
-                            format: "CODE128", // Format Code-128
-                            displayValue: false, // JANGAN tampilkan di sini, karena teks akan dihandle terpisah
+                            format: "CODE128", 
+                            displayValue: false, 
                             width: 2,
-                            height: 40, // Sedikit lebih pendek
-                            margin: 0, // Margin harus 0 agar pas
+                            height: 40, 
+                            margin: 0, 
                             fontSize: 10,
                         });
                         console.log('Barcode rendered successfully for content:', content);
 
                         // Attach print handler after DOM update
-                        const printButton = getEl('print-barcode-btn');
                         if (printButton) {
                             printButton.onclick = () => printBarcodeLabel(printContainerId);
-                            // Ensure Lucide icons are rendered for the button
                             lucide.createIcons();
                         }
                         
-                        // Attach toggle handler
-                        const nameToggle = getEl('toggle-print-name');
-                        const printNameEl = document.querySelector(`#${printContainerId} .print-name`);
-                        const printIdEl = document.querySelector(`#${printContainerId} .print-id`);
-
+                        // Handle toggle visibility in detail view
                         if (nameToggle) {
-                            // Handler untuk toggle
+                            // Initial state based on 'checked' attribute
+                            const isInitialChecked = nameToggle.checked;
+                            if (printNameEl) printNameEl.classList.toggle('hidden', !isInitialChecked);
+                            if (printIdEl) printIdEl.classList.toggle('hidden', !isInitialChecked);
+
+                            // Handler for future changes
                             nameToggle.onchange = (e) => {
-                                // Toggle visibility in the detail view
                                 if (printNameEl) printNameEl.classList.toggle('hidden', !e.target.checked);
                                 if (printIdEl) printIdEl.classList.toggle('hidden', !e.target.checked);
                             };
-                            // Apply initial state based on 'checked'
-                            if (printNameEl) printNameEl.classList.toggle('hidden', !nameToggle.checked);
-                            if (printIdEl) printIdEl.classList.toggle('hidden', !nameToggle.checked);
                         }
 
 
