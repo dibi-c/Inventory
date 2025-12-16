@@ -487,7 +487,7 @@
         
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
         // Menggunakan JsBarcode (via CDN) untuk merender Code-128
-        const generateBarcodeDisplay = (content) => {
+        const generateBarcodeDisplay = (content, name) => {
             // ID unik untuk elemen SVG barcode agar bisa dirender oleh JsBarcode
             const barcodeId = `barcode-${selectedComponentId || Date.now()}`; 
             
@@ -499,7 +499,7 @@
                     
                     <svg id="${barcodeId}" class="mx-auto"></svg>
                     
-                    <p class="mt-2 text-sm text-gray-600 font-mono break-all">${content}</p>
+                    <p class="mt-1 text-base font-semibold text-gray-800">${name}</p>
                 </div>
             `;
 
@@ -579,7 +579,7 @@
             });
         };
         
-        // --- PERBAIKAN LOGIKA TOMBOL TUTUP DIMULAI DI SINI ---
+        // --- LOGIKA TOMBOL TUTUP SCANNER ---
         const stopScanner = () => {
             if (html5QrcodeScanner) {
                 // 1. Coba hentikan aliran kamera secara asinkron
@@ -605,7 +605,7 @@
                 getEl('scanner-result').innerHTML = `<p class="text-gray-500">Pemindai ditutup.</p>`;
             }
         };
-        // --- PERBAIKAN LOGIKA TOMBOL TUTUP BERAKHIR DI SINI ---
+        // --- END LOGIKA TOMBOL TUTUP SCANNER ---
 
         const handleScannedBarcode = (barcode) => {
             // 1. Tampilkan hasil scan dan status pencarian
@@ -644,7 +644,6 @@
         };
 
         // --- Render UI ---
-        // ... (Kode Render Dashboard, List, Detail, Modals, dan Event Listeners lainnya sama dengan sebelumnya) ...
         
         // Render Dashboard
         const renderDashboard = () => {
@@ -767,8 +766,7 @@
             getEl('detail-photo').src = item.photoUrl;
 
             // Barcode Display
-            getEl('barcode-display').innerHTML = generateBarcodeDisplay(item.barcodeContent);
-
+            getEl('barcode-display').innerHTML = generateBarcodeDisplay(item.barcodeContent, item.name);
             // Button Edit & Delete
             getEl('edit-item-btn').onclick = () => openItemFormModal('edit', item);
             getEl('delete-item-btn').onclick = () => deleteComponent(item.id);
@@ -905,6 +903,19 @@
 
         // Tombol Tutup Modal Pesan (Penting untuk mengatasi masalah logout)
         getEl('message-modal-close-btn').onclick = closeModal;
+        
+        // FIX: Tombol Kembali di Detail View (Mengatasi masalah scope module dan memperbarui navigasi aktif)
+        const backToListBtn = getEl('back-to-list-btn');
+        if (backToListBtn) {
+            backToListBtn.onclick = () => {
+                // Panggil showView
+                showView('list');
+                // Perbarui status aktif navigasi (secara manual, karena tidak menggunakan handleNavClick)
+                document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                getEl('nav-list').classList.add('active');
+            };
+        }
+
 
         // Load Barcode Scanner Library (html5-qrcode)
         const loadScannerLibrary = (callback = null) => {
@@ -1202,7 +1213,7 @@
         </div>
 
         <div id="detail-view" class="app-view hidden">
-            <button onclick="showView('list')" class="text-blue-600 hover:text-blue-800 flex items-center mb-4">
+            <button id="back-to-list-btn" class="text-blue-600 hover:text-blue-800 flex items-center mb-4">
                 <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Kembali ke Daftar
             </button>
 
@@ -1266,7 +1277,7 @@
             <div id="scanner-result" class="mt-4 p-4 max-w-lg mx-auto bg-white rounded-xl shadow">
                 <p class="text-gray-500">Menunggu kamera...</p>
             </div>
-
+            
             <button onclick="stopScanner(); showView('list')" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
                 <i data-lucide="x" class="w-5 h-5 inline mr-1"></i> Tutup Scanner
             </button>
