@@ -485,46 +485,44 @@
             }
         };
         
-        // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
-        // Menggunakan JsBarcode (via CDN) untuk merender Code-128
-        const generateBarcodeDisplay = (content) => {
-            // ID unik untuk elemen SVG barcode agar bisa dirender oleh JsBarcode
-            const barcodeId = `barcode-${selectedComponentId || Date.now()}`; 
+        const handleScannedBarcode = (barcode) => {
+            // 1. Hentikan Scanner terlebih dahulu (Langkah ini sudah berhasil)
+            stopScanner(); 
             
-            // String HTML untuk tampilan Barcode (SVG)
-            // *QR Code placeholder telah dihapus*
-            const displayHtml = `
-                <div class="p-4 bg-white border border-gray-300 rounded-lg text-center mt-4">
-                    <h4 class="font-bold text-gray-700 mb-2">Barcode (Code-128)</h4>
-                    
-                    <svg id="${barcodeId}" class="mx-auto"></svg>
-                    
-                    <p class="mt-2 text-sm text-gray-600 font-mono break-all">${content}</p>
-                </div>
-            `;
-
-            // Panggil JsBarcode setelah elemen SVG dimasukkan ke DOM.
-            // Timeout 100ms digunakan untuk memastikan DOM telah diperbarui.
-            setTimeout(() => {
-                const svgElement = getEl(barcodeId);
-                if (svgElement && window.JsBarcode) {
-                    try {
-                        window.JsBarcode(`#${barcodeId}`, content, {
-                            format: "CODE128", // Format Code-128
-                            displayValue: true,
-                            width: 2,
-                            height: 50,
-                            margin: 10
-                        });
-                        console.log('Barcode rendered successfully for content:', content);
-                    } catch (e) {
-                        console.error("Gagal merender Barcode:", e);
-                        svgElement.innerHTML = `<p class="text-red-500 text-sm">Error saat merender barcode: ${e.message}</p>`;
-                    }
+            // Menggunakan try...catch untuk menangkap error yang mencegah modal muncul
+            try {
+                // Tampilkan pesan awal (Ini seharusnya muncul, jika tidak, error terjadi di bawah ini)
+                getEl('scanner-result').innerHTML = `<p class="text-green-600 font-bold">Kode terdeteksi: ${barcode}. Mencari data...</p>`;
+                
+                // Pengecekan Kesiapan Data: (Penting jika Anda belum login atau data lambat dimuat)
+                if (!isAuthReady || inventory.length === 0) {
+                    showMessageModal('Error Data', `Barcode terdeteksi (${barcode}), tetapi data inventaris belum dimuat. Pastikan Anda sudah login dan data siap. Coba periksa koneksi internet Anda.`);
+                    return;
                 }
-            }, 100); 
-
-            return displayHtml;
+    
+                // 2. Mencari Komponen
+                const component = inventory.find(i => i.barcodeContent === barcode);
+    
+                // 3. Memeriksa Hasil Pencarian
+                if (component) {
+                    // KASUS 1: Komponen Ditemukan (Masuk ke Detail)
+                    selectedComponentId = component.id;
+                    showView('detail'); // Pindah ke tampilan detail
+                    showMessageModal('Ditemukan', `Komponen ${component.name} ditemukan!`); // Tampilkan pesan berhasil
+                } else {
+                    // KASUS 2: Komponen TIDAK Ditemukan (Beri catatan kode tidak sesuai)
+                    showMessageModal('Tidak Ditemukan', `Barcode/Kode Barang "${barcode}" tidak ditemukan. Silakan tambahkan komponen baru.`);
+                    
+                    // Isi form tambah komponen dengan barcode yang discan
+                    openItemFormModal('add');
+                    getEl('item-id').value = barcode;
+                    getEl('item-barcode').value = barcode;
+                }
+            } catch (error) {
+                // TANGKAP ERROR dan tampilkan di modal
+                console.error("Error saat memproses barcode:", error);
+                showMessageModal('Error Pemrosesan Fatal', `Terjadi error saat memproses barcode: ${error.message}. Mohon periksa Konsol Browser (F12) untuk detail error.`);
+            }
         };
         
         // --- Fungsi Barcode (Scanner) ---
@@ -1374,5 +1372,6 @@
     
 </body>
 </html>
+
 
 
