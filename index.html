@@ -485,18 +485,22 @@
             }
         };
         
-        const handleScannedBarcode = (barcode) => {
-            // 1. Hentikan Scanner terlebih dahulu (Langkah ini sudah berhasil)
+        // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
+        // Menggunakan JsBarcode (via CDN) untuk merender Code-128
+      const handleScannedBarcode = (barcode) => {
+            // 1. Hentikan Scanner terlebih dahulu (Dipindahkan ke sini untuk memastikan pemrosesan dimulai)
             stopScanner(); 
             
             // Menggunakan try...catch untuk menangkap error yang mencegah modal muncul
             try {
-                // Tampilkan pesan awal (Ini seharusnya muncul, jika tidak, error terjadi di bawah ini)
+                // Tampilkan pesan awal
                 getEl('scanner-result').innerHTML = `<p class="text-green-600 font-bold">Kode terdeteksi: ${barcode}. Mencari data...</p>`;
                 
-                // Pengecekan Kesiapan Data: (Penting jika Anda belum login atau data lambat dimuat)
+                // Pengecekan Kesiapan Data:
                 if (!isAuthReady || inventory.length === 0) {
-                    showMessageModal('Error Data', `Barcode terdeteksi (${barcode}), tetapi data inventaris belum dimuat. Pastikan Anda sudah login dan data siap. Coba periksa koneksi internet Anda.`);
+                    // Pindah view agar tidak stuck di scanner
+                    showView('list'); 
+                    showMessageModal('Error Data', `Barcode terdeteksi (${barcode}), tetapi data inventaris belum dimuat. Pastikan Anda sudah login dan data siap.`);
                     return;
                 }
     
@@ -510,7 +514,7 @@
                     showView('detail'); // Pindah ke tampilan detail
                     showMessageModal('Ditemukan', `Komponen ${component.name} ditemukan!`); // Tampilkan pesan berhasil
                 } else {
-                    // KASUS 2: Komponen TIDAK Ditemukan (Beri catatan kode tidak sesuai)
+                    // KASUS 2: Komponen TIDAK DITEMUKAN (Beri catatan kode tidak sesuai)
                     showMessageModal('Tidak Ditemukan', `Barcode/Kode Barang "${barcode}" tidak ditemukan. Silakan tambahkan komponen baru.`);
                     
                     // Isi form tambah komponen dengan barcode yang discan
@@ -521,6 +525,11 @@
             } catch (error) {
                 // TANGKAP ERROR dan tampilkan di modal
                 console.error("Error saat memproses barcode:", error);
+                
+                // Pindah view agar tidak stuck di scanner
+                showView('list');
+                
+                // Tampilkan error menggunakan modal, ini harusnya bekerja
                 showMessageModal('Error Pemrosesan Fatal', `Terjadi error saat memproses barcode: ${error.message}. Mohon periksa Konsol Browser (F12) untuk detail error.`);
             }
         };
@@ -548,7 +557,7 @@
             html5QrcodeScanner = new Html5Qrcode("reader");
             
             const onScanSuccess = (decodedText, decodedResult) => {
-               // stopScanner();
+                //stopScanner();
                 handleScannedBarcode(decodedText);
             };
 
@@ -591,40 +600,24 @@
             }
         };
         
-       const handleScannedBarcode = (barcode) => {
-    // 1. Hentikan Scanner terlebih dahulu setelah kode diterima
-    // Ini penting agar tampilan UI dapat diperbarui tanpa konflik kamera
-    stopScanner(); 
-    
-    // Tampilkan pesan awal
-    getEl('scanner-result').innerHTML = `<p class="text-green-600 font-bold">Kode terdeteksi: ${barcode}. Mencari data...</p>`;
-    
-    // Pengecekan Kesiapan Data:
-    // Pastikan user sudah login dan data inventory sudah terisi
-    if (!isAuthReady || inventory.length === 0) {
-        showMessageModal('Error Data', `Barcode terdeteksi, tetapi data inventaris belum dimuat. Harap tunggu hingga data siap (setelah login) dan coba lagi.`);
-        return; // Hentikan proses jika data belum siap
-    }
+        const handleScannedBarcode = (barcode) => {
+            getEl('scanner-result').innerHTML = `<p class="text-green-600 font-bold">Kode terdeteksi: ${barcode}. Mencari data...</p>`;
+            
+            const component = inventory.find(i => i.barcodeContent === barcode);
 
-    // 2. Mencari Komponen
-    const component = inventory.find(i => i.barcodeContent === barcode);
-
-    // 3. Memeriksa Hasil Pencarian
-    if (component) {
-        // KASUS 1: Komponen Ditemukan (Masuk ke Detail)
-        selectedComponentId = component.id;
-        showView('detail'); // Pindah ke tampilan detail
-        showMessageModal('Ditemukan', `Komponen ${component.name} ditemukan!`); // Tampilkan pesan berhasil
-    } else {
-        // KASUS 2: Komponen TIDAK Ditemukan (Beri catatan kode tidak sesuai)
-        showMessageModal('Tidak Ditemukan', `Barcode/Kode Barang "${barcode}" tidak ditemukan. Silakan tambahkan komponen baru.`);
-        
-        // Isi form tambah komponen dengan barcode yang discan
-        openItemFormModal('add');
-        getEl('item-id').value = barcode;
-        getEl('item-barcode').value = barcode;
-    }
-};
+            if (component) {
+                selectedComponentId = component.id;
+                showView('detail');
+                showMessageModal('Ditemukan', `Komponen ${component.name} ditemukan!`);
+            } else {
+                showMessageModal('Tidak Ditemukan', `Barcode/Kode Barang "${barcode}" tidak ditemukan. Silakan tambahkan komponen baru.`);
+                
+                // Isi form tambah komponen dengan barcode yang discan
+                openItemFormModal('add');
+                getEl('item-id').value = barcode;
+                getEl('item-barcode').value = barcode;
+            }
+        };
 
         // --- Render UI ---
 
@@ -1372,6 +1365,3 @@
     
 </body>
 </html>
-
-
-
