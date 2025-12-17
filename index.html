@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -312,7 +313,6 @@
         getEl('login-btn').onclick = async () => {
             const email = getEl('login-email').value;
             const password = getEl('login-password').value;
-            const rememberMe = getEl('remember-me').checked;
             
             if (!auth) {
                 showMessageModal('Error', 'Firebase belum diinisialisasi. Cek Konfigurasi Lanjut.');
@@ -320,11 +320,6 @@
             }
 
             try {
-                if (rememberMe) {
-                    localStorage.setItem('eims_remembered_email', email);
-                } else {
-                    localStorage.removeItem('eims_remembered_email');
-                }
                 await signInWithEmailAndPassword(auth, email, password);
                 showMessageModal('Berhasil', 'Login berhasil! Selamat datang.');
             } catch (error) {
@@ -905,8 +900,9 @@
                     const isIN = t.type === 'IN';
                     const colorClass = isIN ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
                     const sign = isIN ? '+' : '-';
-                    const date = t.timestamp ? new Date(t.timestamp.seconds * 1000).toLocaleString('id-ID') : 'N/A';
 
+                    const date = t.timestamp ? new Date(t.timestamp.seconds * 1000).toLocaleString('id-ID') : 'N/A';
+                    
                     historyEl.innerHTML += `
                         <div class="p-3 border-b last:border-b-0 flex justify-between items-center ${isIN ? 'hover:bg-green-50' : 'hover:bg-red-50'} transition">
                             <div>
@@ -930,8 +926,9 @@
         const openItemFormModal = (mode, item = {}) => {
             const formModal = getEl('item-form-modal');
             const formTitle = getEl('item-form-title');
+            
             formModal.dataset.mode = mode;
-
+            
             // Reset form
             getEl('item-id').value = '';
             getEl('item-name').value = '';
@@ -944,7 +941,7 @@
             getEl('item-unit').value = 'pcs';
             getEl('item-barcode').value = '';
             getEl('item-id').readOnly = false;
-
+            
             if (mode === 'edit') {
                 formTitle.textContent = 'Edit Komponen: ' + item.name;
                 getEl('item-id').value = item.itemId || '';
@@ -958,8 +955,7 @@
                 getEl('item-unit').value = item.unit || 'pcs';
                 getEl('item-barcode').value = item.barcodeContent || item.itemId || '';
                 getEl('item-id').readOnly = true; // Jangan izinkan edit ID di mode edit
-            } else {
-                // add mode
+            } else { // add mode
                 formTitle.textContent = 'Tambah Komponen Baru';
             }
 
@@ -977,20 +973,21 @@
             modal.classList.remove('hidden');
         };
 
+
         // --- Event Listeners UI Global ---
 
-        // Tambahkan listener untuk logout mode mobile
-        const logoutBtnMobile = getEl('logout-btn-mobile');
-        if (logoutBtnMobile) {
-            logoutBtnMobile.onclick = async () => {
-                try {
-                    await signOut(auth);
-                    showMessageModal('Informasi', 'Anda telah berhasil Logout.');
-                } catch (error) {
-                    showMessageModal('Error Logout', error.message);
-                }
-            };
+// Tambahkan listener untuk logout mode mobile
+const logoutBtnMobile = getEl('logout-btn-mobile');
+if (logoutBtnMobile) {
+    logoutBtnMobile.onclick = async () => {
+        try {
+            await signOut(auth);
+            showMessageModal('Informasi', 'Anda telah berhasil Logout.');
+        } catch (error) {
+            showMessageModal('Error Logout', error.message);
         }
+    };
+}
 
         // Navigasi
         const handleNavClick = (viewName) => {
@@ -998,22 +995,20 @@
             getEl(`nav-${viewName}`).classList.add('active');
             showView(viewName);
         };
-
         getEl('nav-dashboard').onclick = () => handleNavClick('dashboard');
         getEl('nav-list').onclick = () => handleNavClick('list');
         getEl('nav-scan').onclick = () => handleNavClick('scan');
-
         getEl('sidebar-toggle-btn').onclick = toggleSidebar;
 
         // Pencarian Cepat
         getEl('search-input').oninput = (e) => renderInventoryList(e.target.value);
-
+        
         // Tombol Tambah Komponen
         getEl('add-item-btn').onclick = () => openItemFormModal('add');
 
         // Tombol Simpan Komponen
         getEl('save-item-btn').onclick = saveComponent;
-
+        
         // Tombol Simpan Transaksi
         getEl('save-stock-btn').onclick = updateStock;
         
@@ -1028,7 +1023,7 @@
 
         // Tombol Tutup Modal Pesan (Penting untuk mengatasi masalah logout)
         getEl('message-modal-close-btn').onclick = closeModal;
-
+        
         // FIX: Tombol Kembali di Detail View (Mengatasi masalah scope module dan memperbarui navigasi aktif)
         const backToListBtn = getEl('back-to-list-btn');
         if (backToListBtn) {
@@ -1041,27 +1036,10 @@
             };
         }
 
-        // --- Logika Tampilkan Password ---
-        const togglePasswordBtn = getEl('toggle-password');
-        if (togglePasswordBtn) {
-            togglePasswordBtn.onclick = () => {
-                const passwordInput = getEl('login-password');
-                const eyeIcon = togglePasswordBtn.querySelector('i');
-                
-                if (passwordInput.type === 'password') {
-                    passwordInput.type = 'text';
-                    eyeIcon.setAttribute('data-lucide', 'eye-off');
-                } else {
-                    passwordInput.type = 'password';
-                    eyeIcon.setAttribute('data-lucide', 'eye');
-                }
-                lucide.createIcons();
-            };
-        }
 
         // Load Barcode Scanner Library (html5-qrcode)
         const loadScannerLibrary = (callback = null) => {
-             if (typeof Html5Qrcode === 'undefined') {
+            if (typeof Html5Qrcode === 'undefined') {
                 const script = document.createElement('script');
                 script.src = 'https://unpkg.com/html5-qrcode';
                 document.head.appendChild(script);
@@ -1081,7 +1059,7 @@
 
         // Inisialisasi awal aplikasi
         window.addEventListener('DOMContentLoaded', () => {
-            // 1. Muat library scanner secara non-blocking
+             // 1. Muat library scanner secara non-blocking
             loadScannerLibrary();
             
             // 2. Terapkan status sidebar awal
@@ -1092,27 +1070,19 @@
                 toggleIcon.setAttribute('data-lucide', 'chevrons-left'); // Set icon awal
             }
             
-            // 3. Cek apakah ada email yang diingat
-            const savedEmail = localStorage.getItem('eims_remembered_email');
-            if (savedEmail) {
-                getEl('login-email').value = savedEmail;
-                getEl('remember-me').checked = true;
-            }
-
-            // 4. Jika auth belum terinisialisasi (misal, karena error config), pastikan di login view.
+            // 3. Jika auth belum terinisialisasi (misal, karena error config), pastikan di login view.
             if (!auth || !auth.currentUser) {
-                showView('login');
+                 showView('login');
             }
         });
-
+        
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-
         :root {
             font-family: 'Inter', sans-serif;
         }
-
+        
         /* General Transition Definition for Sidebar and Content */
         .sidebar {
             transition: width 0.3s ease;
@@ -1120,41 +1090,38 @@
         .content {
             transition: padding-left 0.3s ease;
         }
-
+        
         /* Custom Print Style for Barcode Label (32mm x 64mm) */
         @page {
             /* Landscape: width 64mm, height 32mm */
-            size: 64mm 32mm;
+            size: 64mm 32mm; 
             margin: 0;
         }
-
+        
         @media print {
             /* Sembunyikan semua elemen kecuali container label untuk cetak */
             body > *:not(.print-label-container) {
                 display: none !important;
             }
-
             .print-label-container {
                 display: flex !important;
                 flex-direction: column;
                 justify-content: center;
                 align-items: center;
                 /* Ukuran kertas */
-                width: 64mm;
+                width: 64mm; 
                 height: 32mm;
                 /* Reset standard print styles */
                 margin: 0;
                 padding: 1mm; /* Padding kecil agar tidak terlalu mepet tepi */
                 box-sizing: border-box;
             }
-
             /* Styling untuk SVG Barcode di mode cetak */
             .print-label-container svg {
                 max-width: 60mm;
                 height: 20mm; /* Atur ketinggian barcode */
                 margin-top: 0;
             }
-
             /* Styling untuk Nama/ID Barang di mode cetak */
             .print-label-container .print-name {
                 font-size: 8pt; /* Ukuran font kecil untuk nama */
@@ -1165,15 +1132,13 @@
                 white-space: nowrap;
                 overflow: hidden;
             }
-
-            .print-label-container .print-id {
+             .print-label-container .print-id {
                 font-size: 7pt; /* Ukuran font lebih kecil untuk ID */
                 line-height: 1;
                 text-align: center;
                 margin-bottom: 0;
                 font-family: monospace;
             }
-
             /* Force the element to the top of the page */
             html, body {
                 height: 100%;
@@ -1181,8 +1146,9 @@
             }
         }
 
+
         /* Responsive for mobile (Sidebar becomes bottom bar) */
-        /* Responsive for mobile (Sidebar becomes bottom bar with icons only) */
+       /* Responsive for mobile (Sidebar becomes bottom bar with icons only) */
 @media (max-width: 768px) {
     .sidebar {
         width: 100%;
@@ -1192,12 +1158,18 @@
         z-index: 50;
         padding: 0.5rem;
     }
+
     .content {
         padding-bottom: 80px; /* Beri ruang agar konten tidak tertutup bar */
     }
-    
+
     /* Hilangkan semua teks & elemen dekoratif */
-    .nav-label, #sidebar-title, #sidebar-subtitle, .sidebar-footer, hr, #sidebar-toggle-btn {
+    .nav-label, 
+    #sidebar-title, 
+    #sidebar-subtitle, 
+    .sidebar-footer, 
+    hr,
+    #sidebar-toggle-btn {
         display: none !important;
     }
 
@@ -1216,506 +1188,442 @@
         justify-content: center;
         flex: 1;
     }
+
     .nav-item i {
         margin-right: 0 !important;
     }
-    
+
     /* Sembunyikan tombol tambah teks jika mengganggu, gunakan ikon saja */
     #add-item-btn {
         background-color: transparent !important; /* Agar tidak putih kotak besar */
         border: none !important;
-        color: #4b5563 !important;
-        padding: 0.75rem !important;
-        flex: 1;
-        justify-content: center;
-    }
-     #add-item-btn span {
-         display: none;
-     }
-}
-
-/* Logic Sidebar Open/Closed on Desktop */
-@media (min-width: 769px) {
-    .sidebar-open .sidebar {
-        width: 260px;
-    }
-    .sidebar-open .content {
-        padding-left: 260px;
-    }
-    .sidebar-closed .sidebar {
-        width: 80px;
-    }
-    .sidebar-closed .content {
-        padding-left: 80px;
+        color: #2563eb !important; /* Warna biru icon */
     }
     
-    /* Hide labels when closed */
-    .sidebar-closed .nav-label, 
-    .sidebar-closed #sidebar-title, 
-    .sidebar-closed #sidebar-subtitle,
-    .sidebar-closed .sidebar-footer div:not(#logout-btn),
-    .sidebar-closed hr {
-        display: none;
-    }
-    
-    .sidebar-closed .nav-item {
-        justify-content: center;
-        padding: 0.75rem;
-    }
-    .sidebar-closed .nav-item i {
-        margin-right: 0;
-    }
-
-    .sidebar-closed #add-item-btn {
-        justify-content: center;
-    }
-    .sidebar-closed #add-item-btn span {
-        display: none;
+    #add-item-btn:hover {
+        background-color: #f3f4f6 !important; /* Abu-abu muda saat ditekan di HP */
     }
 }
+        
+        /* Desktop States (min-width: 768px) */
+        @media (min-width: 768px) {
+            
+            /* --- Sidebar Open State (280px) --- */
+            .sidebar-open .sidebar {
+                width: 280px;
+            }
+            .sidebar-open .content {
+                padding-left: 280px; /* Fix: Explicitly define padding for open state */
+            }
+            .nav-label {
+                opacity: 1;
+                width: auto;
+                transition: opacity 0.1s ease, width 0.3s ease;
+            }
 
+
+            /* --- Sidebar Closed State (80px) --- */
+            .sidebar-closed .sidebar {
+                width: 80px; /* Lebar baru yang kecil */
+            }
+            .sidebar-closed .content {
+                padding-left: 80px; /* Offset konten baru */
+            }
+            
+            /* Sembunyikan label, biarkan ikon */
+            .sidebar-closed .nav-label {
+                opacity: 0;
+                width: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                display: none; /* Paksa hilang agar lebar benar-benar 0 */
+            }
+            .sidebar-closed #sidebar-title,
+            .sidebar-closed #sidebar-subtitle {
+                display: none;
+            }
+            /* Posisi tengah ikon */
+            .sidebar-closed .nav-item {
+                justify-content: center;
+                padding: 0.75rem 0.5rem;
+            }
+            .sidebar-closed .nav-item i {
+                margin-right: 0 !important;
+            }
+            .sidebar-closed .sidebar-footer {
+                 display: none; /* Sembunyikan footer di mode sempit */
+            }
+            .sidebar-closed #add-item-btn {
+                padding: 0.75rem 0.5rem; /* Sesuaikan padding tombol add */
+                justify-content: center;
+            }
+            .sidebar-closed #add-item-btn .nav-label {
+                display: none;
+            }
+        }
+        
+        /* General Navigation Item Styling */
         .nav-item {
             display: flex;
             align-items: center;
-            padding: 0.75rem 1rem;
-            margin: 0.25rem 0.5rem;
+            padding: 1rem;
             border-radius: 0.75rem;
-            color: #4b5563;
-            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
+            overflow: hidden; /* Penting untuk transisi lebar */
         }
-
         .nav-item:hover {
             background-color: #f3f4f6;
-            color: #1f2937;
         }
-
         .nav-item.active {
-            background-color: #3b82f6;
+            background-color: #2563EB;
             color: white;
+            font-weight: 600;
         }
-
-        .card {
-            background: white;
-            border-radius: 1rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        .nav-item.active:hover {
+            background-color: #1D4ED8;
+        }
+        
+        #reader {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .html5-qrcode-element {
+            /* Fix scanner view inside Tailwind layout */
+            margin-top: 1rem !important;
         }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen sidebar-open">
+<body class="bg-gray-50 flex flex-col md:flex-row min-h-screen sidebar-open">
 
-    <nav id="sidebar" class="sidebar fixed top-0 left-0 h-full bg-white border-r z-40 flex flex-col hidden">
-        <div class="p-6">
-            <h1 id="sidebar-title" class="text-2xl font-black text-blue-600 tracking-tighter">E-IMS</h1>
-            <p id="sidebar-subtitle" class="text-xs text-gray-500 font-medium">Electronic Inventory</p>
-        </div>
-
-        <div class="flex-grow">
-            <div id="nav-dashboard" class="nav-item active">
-                <i data-lucide="layout-dashboard" class="w-5 h-5 mr-3"></i>
-                <span class="nav-label">Dashboard</span>
+    <nav id="sidebar" class="sidebar bg-white shadow-xl md:shadow-none md:fixed md:h-full p-4 flex flex-col justify-between">
+        
+        <div class="md:block flex justify-between items-center w-full mb-4 md:mb-0">
+            <div class="flex-grow">
+                <h1 id="sidebar-title" class="text-2xl font-extrabold text-blue-600 hidden md:block">E-IMS</h1>
+                <h2 id="sidebar-subtitle" class="text-sm text-gray-500 hidden md:block">Inventory Komponen Elektronik</h2>
             </div>
-            <div id="nav-list" class="nav-item">
-                <i data-lucide="package" class="w-5 h-5 mr-3"></i>
-                <span class="nav-label">Daftar Stok</span>
-            </div>
-            <div id="nav-scan" class="nav-item">
-                <i data-lucide="scan-barcode" class="w-5 h-5 mr-3"></i>
-                <span class="nav-label">Scan Barcode</span>
-            </div>
-            
-            <hr class="my-4 border-gray-100">
-            
-            <button id="add-item-btn" class="nav-item w-full flex items-center bg-white text-gray-700 hover:bg-gray-100">
-                <i data-lucide="plus-circle" class="w-5 h-5 mr-3 text-blue-500"></i>
-                <span class="nav-label">Tambah Komponen</span>
+            <button id="sidebar-toggle-btn" class="hidden md:block p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
+                 <i id="toggle-icon" data-lucide="chevrons-left" class="w-6 h-6"></i>
             </button>
+            <div class="md:hidden flex justify-around items-center w-full">
+                </div>
         </div>
 
-        <div class="p-4 border-t sidebar-footer">
-            <div class="flex items-center space-x-3 mb-4">
-                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs" id="user-avatar">
-                    <i data-lucide="user" class="w-4 h-4"></i>
-                </div>
-                <div class="overflow-hidden">
-                    <p class="text-xs font-bold text-gray-800 truncate" id="user-info">Memuat...</p>
-                    <p class="text-[10px] text-gray-500">Teknisi</p>
-                </div>
-            </div>
-            <div id="logout-btn" class="nav-item text-red-600 hover:bg-red-50 m-0">
-                <i data-lucide="log-out" class="w-5 h-5 mr-3"></i>
-                <span class="nav-label">Keluar</span>
-            </div>
+        <hr class="my-4 hidden md:block">
+        
+        <div class="flex md:flex-col justify-around md:justify-start w-full md:w-auto space-x-0 md:space-y-2 flex-grow">
+    
+    <div id="nav-dashboard" class="nav-item active flex items-center justify-center md:justify-start">
+        <i data-lucide="layout-dashboard" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+        <span class="nav-label hidden md:inline">Dashboard</span>
+    </div>
+
+    <div id="nav-list" class="nav-item flex items-center justify-center md:justify-start">
+        <i data-lucide="package-search" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+        <span class="nav-label hidden md:inline">Daftar Inventaris</span>
+    </div>
+
+    <div id="nav-scan" class="nav-item flex items-center justify-center md:justify-start">
+        <i data-lucide="scan" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+        <span class="nav-label hidden md:inline">Scan Barcode</span>
+    </div>
+    
+    
+   
+ <button id="add-item-btn" class="nav-item flex items-center justify-center md:justify-start w-full transition-all duration-200 border-2 border-blue-600 text-blue-600 bg-white hover:bg-blue-600 hover:text-white md:mt-4">
+    <i data-lucide="plus-circle" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+    <span class="nav-label hidden md:inline font-semibold">Tambah Komponen</span>
+</button>
+
+    <div id="logout-btn-mobile" class="nav-item text-red-500 md:hidden flex items-center justify-center">
+        <i data-lucide="log-out" class="w-5 h-5 flex-shrink-0"></i>
+        </div>
+    
+</div>
+
+        <div class="hidden md:block border-t pt-4 text-center sidebar-footer">
+            <p class="text-xs text-gray-700 font-semibold truncate" id="user-info"></p>
+            <button id="logout-btn" class="text-xs text-red-500 hover:text-red-700 mt-1 flex items-center mx-auto">
+                <i data-lucide="log-out" class="w-4 h-4 mr-1"></i> <span id="logout-btn-text">Logout</span>
+            </button>
         </div>
     </nav>
-
-    <main class="content min-h-screen">
-        <header class="bg-white border-b sticky top-0 z-30 p-4 flex items-center justify-between">
-            <button id="sidebar-toggle-btn" class="p-2 hover:bg-gray-100 rounded-lg text-gray-500">
-                <i id="toggle-icon" data-lucide="chevrons-left" class="w-6 h-6"></i>
-            </button>
-            <div class="flex-grow max-w-md mx-4">
-                <div class="relative">
-                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
-                    <input type="text" id="search-input" placeholder="Cari nama, spek, atau lokasi..." class="w-full bg-gray-100 border-none rounded-full py-2 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 text-sm transition-all">
+    
+    <main class="content flex-grow p-4 md:p-8">
+        
+        <div id="login-view" class="app-view hidden max-w-sm mx-auto my-10 p-6 bg-white shadow-xl rounded-xl">
+            <h2 class="text-3xl font-bold text-center text-blue-600 mb-6">Login E-IMS</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="login-email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" value="teknisi@mail.com">
                 </div>
-            </div>
-            <div class="flex items-center space-x-2">
-                <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white shadow-sm">
-                    <i data-lucide="cpu" class="w-4 h-4"></i>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="login-password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" value="password123">
                 </div>
-            </div>
-        </header>
+                <button id="login-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Login
+                </button>
+                <button id="register-btn" class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md shadow-sm text-sm font-medium text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Register (Buat Akun Baru)
+                </button>
+                
+                <hr class="my-4">
+                
+                <button id="toggle-config-btn" class="w-full text-xs text-gray-500 hover:text-gray-800 transition flex items-center justify-center">
+                    <i data-lucide="settings" class="w-4 h-4 inline mr-1"></i> Konfigurasi Lanjut
+                </button>
 
-        <div class="p-4 md:p-8 max-w-6xl mx-auto">
-            
-            <div id="login-view" class="app-view hidden">
-                <div class="flex flex-col items-center justify-center min-h-[70vh]">
-                    <div class="card w-full max-w-md p-8">
-                        <div class="text-center mb-8">
-                            <div class="w-16 h-16 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg mb-4">
-                                <i data-lucide="shield-check" class="w-10 h-10"></i>
-                            </div>
-                            <h2 class="text-3xl font-black text-gray-800">E-IMS Access</h2>
-                            <p class="text-gray-500">Sistem Inventaris Komponen Elektronik</p>
-                        </div>
-                        
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">Email</label>
-                                <input type="email" id="login-email" placeholder="teknisi@perusahaan.com" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">Password</label>
-                                <div class="relative">
-                                    <input type="password" id="login-password" placeholder="••••••••" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none pr-10">
-                                    <button id="toggle-password" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500">
-                                        <i data-lucide="eye" class="w-5 h-5"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <input type="checkbox" id="remember-me" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                                <label for="remember-me" class="ml-2 block text-sm text-gray-700">Ingat saya</label>
-                            </div>
-                            <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg transition transform active:scale-95">Masuk Sistem</button>
-                            <button id="register-btn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl transition mt-2">Daftar Akun Baru</button>
-                        </div>
-                        
-                        <div class="mt-8 pt-6 border-t border-gray-100">
-                            <button id="toggle-config-btn" class="text-xs text-gray-400 hover:text-blue-500 flex items-center mx-auto">
-                                <i data-lucide="settings" class="w-4 h-4 mr-1"></i> Konfigurasi Lanjut
-                            </button>
-                            
-                            <div id="firebase-config-form" class="hidden mt-4 p-4 bg-gray-50 rounded-lg space-y-3">
-                                <p class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Firebase Cloud Config</p>
-                                <input type="text" id="config-apikey" placeholder="API Key" class="w-full text-xs p-2 border rounded">
-                                <input type="text" id="config-projectid" placeholder="Project ID" class="w-full text-xs p-2 border rounded">
-                                <input type="text" id="config-authdomain" placeholder="Auth Domain (Optional)" class="w-full text-xs p-2 border rounded">
-                                <button id="save-config-btn" class="w-full bg-gray-800 text-white text-xs py-2 rounded">Simpan & Muat Ulang</button>
-                                <p class="text-[9px] text-red-400 italic text-center leading-tight mt-1">Gunakan ini hanya jika Anda ingin menghubungkan aplikasi ke database Firebase milik sendiri.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="dashboard-view" class="app-view">
-                <div class="mb-8">
-                    <h2 class="text-3xl font-black text-gray-800">Dashboard</h2>
-                    <p class="text-gray-500">Ringkasan status inventaris saat ini.</p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="card p-6 border-l-8 border-blue-500">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Item</p>
-                                <h3 id="total-items" class="text-4xl font-black text-gray-800">0</h3>
-                            </div>
-                            <div class="p-3 bg-blue-50 rounded-xl text-blue-600">
-                                <i data-lucide="layers" class="w-8 h-8"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card p-6 border-l-8 border-green-500">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Unit Stok</p>
-                                <h3 id="total-stock" class="text-4xl font-black text-gray-800">0</h3>
-                            </div>
-                            <div class="p-3 bg-green-50 rounded-xl text-green-600">
-                                <i data-lucide="box" class="w-8 h-8"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="low-stock-alert" class="card p-6 border-l-8 border-red-500 bg-red-50 hidden">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="text-sm font-medium text-red-600 uppercase tracking-wider">Stok Menipis</p>
-                                <h3 id="low-stock-count" class="text-4xl font-black text-red-700">0</h3>
-                            </div>
-                            <div class="p-3 bg-red-100 rounded-xl text-red-600">
-                                <i data-lucide="alert-triangle" class="w-8 h-8"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card overflow-hidden">
-                    <div class="p-6 border-b bg-gray-50">
-                        <h4 class="font-bold text-gray-700 flex items-center">
-                            <i data-lucide="alert-circle" class="w-5 h-5 mr-2 text-red-500"></i>
-                            Peringatan Stok Minimum
-                        </h4>
-                    </div>
-                    <ul id="low-stock-list" class="divide-y divide-gray-100 p-4 space-y-2">
-                        </ul>
-                </div>
-            </div>
-
-            <div id="list-view" class="app-view hidden">
-                <div class="mb-8 flex justify-between items-end">
+                <div id="firebase-config-form" class="hidden border border-gray-200 p-4 rounded-lg bg-gray-50 space-y-3">
+                    <p class="text-sm font-bold text-gray-700">Ganti Konfigurasi Firebase</p>
                     <div>
-                        <h2 class="text-3xl font-black text-gray-800">Daftar Stok</h2>
-                        <p class="text-gray-500">Kelola database komponen elektronik Anda.</p>
+                        <label for="config-apikey" class="block text-xs font-medium text-gray-600">API Key <span class="text-red-500">*</span></label>
+                        <input type="text" id="config-apikey" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
                     </div>
-                    <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl shadow-lg transition flex items-center" onclick="document.getElementById('add-item-btn').click()">
-                        <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Baru
+                    <div>
+                        <label for="config-projectid" class="block text-xs font-medium text-gray-600">Project ID <span class="text-red-500">*</span></label>
+                        <input type="text" id="config-projectid" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <label for="config-authdomain" class="block text-xs font-medium text-gray-600">Auth Domain (Opsional)</label>
+                        <input type="text" id="config-authdomain" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <button id="save-config-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-500 hover:bg-red-600">
+                        Simpan & Muat Ulang
                     </button>
+                    <p class="text-xs text-red-400 text-center">* Menyimpan konfigurasi akan me-refresh aplikasi.</p>
                 </div>
-                <div id="inventory-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    </div>
+
+            </div>
+        </div>
+
+        <div id="dashboard-view" class="app-view hidden">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">Dashboard Inventaris</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-500">
+                    <p class="text-sm font-medium text-gray-500">Total Jenis Komponen</p>
+                    <p id="total-items" class="text-4xl font-extrabold text-gray-900 mt-1">0</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border-l-4 border-green-500">
+                    <p class="text-sm font-medium text-gray-500">Total Kuantitas Stok</p>
+                    <p id="total-stock" class="text-4xl font-extrabold text-gray-900 mt-1">0</p>
+                </div>
+                <div id="low-stock-alert" class="bg-red-50 p-6 rounded-xl shadow-md border-l-4 border-red-500 hidden">
+                    <p class="text-sm font-medium text-red-700">Peringatan Stok Menipis</p>
+                    <p id="low-stock-count" class="text-4xl font-extrabold text-red-600 mt-1">0</p>
+                    <p class="text-xs text-red-500 mt-2">Segera lakukan pembelian ulang.</p>
+                </div>
             </div>
 
-            <div id="scan-view" class="app-view hidden">
-                <div class="mb-8 text-center">
-                    <h2 class="text-3xl font-black text-gray-800">Pemindai Barcode</h2>
-                    <p class="text-gray-500">Scan label barang untuk update stok cepat.</p>
-                </div>
-                <div class="card max-w-xl mx-auto overflow-hidden">
-                    <div id="reader" class="w-full bg-black aspect-video"></div>
-                    <div class="p-6">
-                        <div id="scanner-result" class="text-center p-4 bg-gray-100 rounded-xl mb-4 text-sm text-gray-600 min-h-[60px] flex items-center justify-center">
-                            Siapkan Barcode komponen...
-                        </div>
-                        <div class="flex space-x-3">
-                            <button onclick="startScanner()" class="flex-grow bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md flex items-center justify-center">
-                                <i data-lucide="refresh-cw" class="w-5 h-5 mr-2"></i> Ulangi Scan
-                            </button>
-                            <button onclick="stopScanner()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-6 rounded-xl flex items-center justify-center">
-                                <i data-lucide="x" class="w-5 h-5"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Daftar Stok Menipis</h3>
+            <div class="bg-white p-4 rounded-xl shadow-md">
+                <ul id="low-stock-list" class="space-y-2">
+                    </ul>
+            </div>
+        </div>
+
+        <div id="list-view" class="app-view hidden">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">Daftar Semua Komponen</h2>
+            
+            <div class="mb-6">
+                <input type="text" id="search-input" placeholder="Cari: Nama, Value, Package, Lokasi, Kode Barang..." 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 transition">
             </div>
 
-            <div id="detail-view" class="app-view hidden">
-                <div class="mb-6">
-                    <button id="back-to-list-btn" class="flex items-center text-blue-600 font-bold hover:underline mb-4">
-                        <i data-lucide="arrow-left" class="w-5 h-5 mr-1"></i> Kembali ke Daftar
-                    </button>
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div class="flex items-center space-x-4">
-                            <img id="detail-photo" src="" alt="Foto Komponen" class="w-20 h-20 object-cover rounded-2xl shadow-md border-2 border-white">
+            <div id="inventory-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                </div>
+        </div>
+
+        <div id="detail-view" class="app-view hidden">
+            <button id="back-to-list-btn" class="text-blue-600 hover:text-blue-800 flex items-center mb-4">
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Kembali ke Daftar
+            </button>
+
+            <div class="bg-white p-6 rounded-xl shadow-xl">
+                <div class="md:flex md:space-x-8">
+                    <div class="md:w-1/2">
+                        <h2 id="detail-name" class="text-4xl font-extrabold text-gray-900 mb-4">Nama Komponen</h2>
+                        <div class="flex items-center space-x-4 mb-6">
+                            <img id="detail-photo" src="https://placehold.co/100x100/A0A0A0/ffffff?text=E-Comp" alt="Foto Komponen" class="w-24 h-24 object-cover rounded-lg border">
                             <div>
-                                <h2 id="detail-name" class="text-3xl font-black text-gray-800 leading-tight">Nama Barang</h2>
-                                <p id="detail-id" class="font-mono text-sm text-gray-500 bg-gray-200 px-2 py-0.5 rounded inline-block mt-1 uppercase tracking-widest">ID-BARANG</p>
-                            </div>
-                        </div>
-                        <div class="flex space-x-2">
-                            <button id="edit-item-btn" class="bg-white border hover:bg-gray-50 p-3 rounded-xl text-gray-600 shadow-sm transition">
-                                <i data-lucide="edit-3" class="w-5 h-5"></i>
-                            </button>
-                            <button id="delete-item-btn" class="bg-white border hover:bg-red-50 p-3 rounded-xl text-red-500 shadow-sm transition">
-                                <i data-lucide="trash-2" class="w-5 h-5"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div class="lg:col-span-2 space-y-6">
-                        <div class="card p-8">
-                            <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
-                                <div>
-                                    <p class="text-xs font-bold text-gray-400 uppercase">Spesifikasi</p>
-                                    <p id="detail-value" class="text-lg font-bold text-gray-800">N/A</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold text-gray-400 uppercase">Package</p>
-                                    <p id="detail-package" class="text-lg font-bold text-gray-800">N/A</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold text-gray-400 uppercase">Brand/Merk</p>
-                                    <p id="detail-brand" class="text-lg font-bold text-gray-800">N/A</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold text-gray-400 uppercase">Lokasi Rak</p>
-                                    <p id="detail-location" class="text-lg font-bold text-blue-600">N/A</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold text-gray-400 uppercase">Min. Stok</p>
-                                    <p id="detail-minstock" class="text-lg font-bold text-gray-800">0</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold text-gray-400 uppercase">Status</p>
-                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">AKTIF</span>
-                                </div>
+                                <p class="text-sm text-gray-500">Stok Saat Ini:</p>
+                                <p class="text-5xl font-extrabold text-green-600">
+                                    <span id="detail-stock">0</span> 
+                                    <span id="detail-unit" class="text-xl font-semibold">pcs</span>
+                                </p>
                             </div>
                         </div>
 
-                        <div class="card overflow-hidden">
-                            <div class="p-6 border-b bg-gray-50 flex justify-between items-center">
-                                <h4 class="font-bold text-gray-700">Riwayat Mutasi Stok</h4>
-                                <i data-lucide="history" class="w-5 h-5 text-gray-400"></i>
-                            </div>
-                            <div id="item-history" class="max-h-[400px] overflow-y-auto">
-                                </div>
+                        <div class="space-y-3">
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Kode Barang:</span> <span id="detail-id" class="font-mono bg-gray-100 p-1 rounded"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Spesifikasi/Value:</span> <span id="detail-value"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Package:</span> <span id="detail-package"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Lokasi:</span> <span id="detail-location" class="bg-blue-100 p-1 rounded font-semibold"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Minimum Stok:</span> <span id="detail-minstock"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Merek:</span> <span id="detail-brand"></span></p>
+                        </div>
+                        
+                        <div class="mt-8 flex space-x-4">
+                            <button id="stock-in-btn" class="flex-1 py-3 px-4 rounded-xl text-white bg-green-600 hover:bg-green-700 font-semibold transition">
+                                <i data-lucide="plus" class="w-5 h-5 inline mr-1"></i> Stok Masuk
+                            </button>
+                            <button id="stock-out-btn" class="flex-1 py-3 px-4 rounded-xl text-white bg-red-600 hover:bg-red-700 font-semibold transition">
+                                <i data-lucide="minus" class="w-5 h-5 inline mr-1"></i> Stok Keluar
+                            </button>
+                        </div>
+                        <div class="mt-4 flex space-x-4">
+                            <button id="edit-item-btn" class="flex-1 py-2 px-4 rounded-xl text-blue-600 bg-blue-100 hover:bg-blue-200 font-semibold transition">Edit Data</button>
+                            <button id="delete-item-btn" class="flex-1 py-2 px-4 rounded-xl text-red-600 bg-red-100 hover:bg-red-200 font-semibold transition">Hapus Komponen</button>
                         </div>
                     </div>
 
-                    <div class="space-y-6">
-                        <div class="card p-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-xl">
-                            <p class="text-sm font-bold opacity-80 uppercase tracking-widest">Stok Tersedia</p>
-                            <div class="flex items-baseline space-x-2 mt-2">
-                                <h3 id="detail-stock" class="text-6xl font-black">0</h3>
-                                <span id="detail-unit" class="text-xl font-bold opacity-80">pcs</span>
-                            </div>
-                            
-                            <div class="grid grid-cols-2 gap-3 mt-8">
-                                <button id="stock-in-btn" class="bg-white/20 hover:bg-white/30 backdrop-blur-md py-3 rounded-xl font-bold text-sm transition flex flex-col items-center">
-                                    <i data-lucide="arrow-down-left" class="w-6 h-6 mb-1"></i> Stok Masuk
-                                </button>
-                                <button id="stock-out-btn" class="bg-white/20 hover:bg-white/30 backdrop-blur-md py-3 rounded-xl font-bold text-sm transition flex flex-col items-center">
-                                    <i data-lucide="arrow-up-right" class="w-6 h-6 mb-1"></i> Stok Keluar
-                                </button>
-                            </div>
-                        </div>
-
+                    <div class="md:w-1/2 mt-8 md:mt-0">
                         <div id="barcode-display">
                             </div>
+
+                        <h3 class="text-xl font-bold text-gray-800 mt-6 mb-3 border-t pt-4">Riwayat Pergerakan Stok</h3>
+                        <div id="item-history" class="max-h-96 overflow-y-auto border rounded-lg bg-gray-50">
+                            </div>
                     </div>
                 </div>
             </div>
-
         </div>
+        
+        <div id="scan-view" class="app-view hidden text-center">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">Pemindai Barcode Cepat</h2>
+            <p class="text-gray-600 mb-4">Gunakan kamera perangkat untuk memindai Barcode (Code-128) atau QR Code.</p>
+            
+            <div id="reader" class="bg-gray-200 rounded-xl p-4 shadow-inner max-w-lg mx-auto">
+                </div>
+
+            <div id="scanner-result" class="mt-4 p-4 max-w-lg mx-auto bg-white rounded-xl shadow">
+                <p class="text-gray-500">Menunggu kamera...</p>
+            </div>
+            
+            <button onclick="stopScanner()" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
+                <i data-lucide="x" class="w-5 h-5 inline mr-1"></i> Tutup Scanner
+            </button>
+        </div>
+
     </main>
 
     <div id="item-form-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div class="p-6 border-b sticky top-0 bg-white z-10 flex justify-between items-center">
-                <h3 id="item-form-title" class="text-xl font-black text-gray-800">Tambah Komponen</h3>
-                <button class="close-modal-btn p-2 hover:bg-gray-100 rounded-full"><i data-lucide="x"></i></button>
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 id="item-form-title" class="text-2xl font-bold text-blue-600">Tambah Komponen Baru</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
-            <div class="p-6 space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <div class="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Kode Barang <span class="text-red-500">*</span></label>
+                    <input type="text" id="item-id" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: R0603-10K">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nama Komponen <span class="text-red-500">*</span></label>
+                    <input type="text" id="item-name" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: Resistor Film Tipis">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Kode Barang / Part Number</label>
-                        <input type="text" id="item-id" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none uppercase font-mono" placeholder="Cth: RES-10K-0603">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Barcode Content (Opsional)</label>
-                        <input type="text" id="item-barcode" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Isi jika beda dengan Kode Barang">
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Nama Komponen</label>
-                        <input type="text" id="item-name" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Cth: Resistor SMD 10K Ohm">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Kategori</label>
-                        <select id="item-category" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                            <option value="Resistor">Resistor</option>
-                            <option value="Kapasitor">Kapasitor</option>
-                            <option value="IC">IC (Integrated Circuit)</option>
-                            <option value="Transistor">Transistor / Mosfet</option>
-                            <option value="Dioda">Dioda</option>
-                            <option value="Connector">Connector</option>
-                            <option value="Module">Sensor / Module</option>
-                            <option value="Lainnya">Lainnya</option>
+                        <label class="block text-sm font-medium text-gray-700">Kategori</label>
+                        <select id="item-category" class="mt-1 block w-full border border-gray-300 rounded-md p-2">
+                            <option>Resistor</option>
+                            <option>Kapasitor</option>
+                            <option>Induktor</option>
+                            <option>IC</option>
+                            <option>Transistor</option>
+                            <option>Sensor</option>
+                            <option>Lainnya</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Spesifikasi / Nilai</label>
-                        <input type="text" id="item-value" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Cth: 10K, 100uF 50V, ESP32">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Package (Ukuran)</label>
-                        <input type="text" id="item-package" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Cth: 0603, 0805, TO-220, DIP-8">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Merk / Brand</label>
-                        <input type="text" id="item-brand" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Cth: Yageo, Samsung, ST">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Lokasi Penyimpanan</label>
-                        <input type="text" id="item-location" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Cth: Rak A-12, Box 3">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Batas Stok Minimum</label>
-                        <input type="number" id="item-minstock" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Satuan</label>
-                        <input type="text" id="item-unit" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="pcs, reel, box">
+                        <label class="block text-sm font-medium text-gray-700">Spesifikasi/Value <span class="text-red-500">*</span></label>
+                        <input type="text" id="item-value" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: 10k ohm 1%, 47uF 50V">
                     </div>
                 </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Package</label>
+                        <input type="text" id="item-package" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: SMD 0603, DIP-8, TO-220">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Merek</label>
+                        <input type="text" id="item-brand" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: Texas Instruments">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Lokasi <span class="text-red-500">*</span></label>
+                        <input type="text" id="item-location" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: Rak A1-05">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Minimum Stok</label>
+                        <input type="number" id="item-minstock" class="mt-1 block w-full border border-gray-300 rounded-md p-2" min="0" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Satuan</label>
+                        <input type="text" id="item-unit" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: pcs, strip, reel" value="pcs">
+                    </div>
+                </div>
+                 <div>
+                    <label class="block text-sm font-medium text-gray-700">Konten Barcode (QR/Code-128)</label>
+                    <input type="text" id="item-barcode" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Default: Kode Barang. Isi jika berbeda.">
+                </div>
             </div>
-            <div class="p-6 border-t flex justify-end space-x-3 bg-gray-50 rounded-b-2xl">
-                <button class="close-modal-btn px-6 py-3 font-bold text-gray-600 hover:text-gray-800 transition">Batal</button>
-                <button id="save-item-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition transform active:scale-95">Simpan Data</button>
+
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="close-modal-btn py-2 px-4 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold">Batal</button>
+                <button id="save-item-btn" class="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">Simpan Komponen</button>
             </div>
         </div>
     </div>
-
+    
     <div id="stock-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-            <div class="flex justify-between items-center mb-6">
-                <h3 id="stock-title" class="text-2xl font-black text-gray-800">Update Stok</h3>
-                <button class="close-modal-btn p-2 hover:bg-gray-100 rounded-full"><i data-lucide="x"></i></button>
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 id="stock-title" class="text-2xl font-bold text-blue-600">Stok Masuk</h3>
+                <button class="close-modal-btn text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
             
-            <div class="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
-                <p class="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Komponen</p>
-                <p id="stock-component-name" class="text-lg font-bold text-gray-800">Nama Barang</p>
-                <p class="text-sm text-gray-600">Stok saat ini: <span id="stock-current-stock" class="font-bold">0 pcs</span></p>
-            </div>
+            <p class="text-lg font-semibold mb-2">Komponen: <span id="stock-component-name" class="text-gray-700"></span></p>
+            <p class="text-sm text-gray-500 mb-4">Stok saat ini: <span id="stock-current-stock" class="font-bold"></span></p>
 
-            <input type="hidden" id="stock-type">
+            <input type="hidden" id="stock-type" value="IN">
+
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-1">Jumlah Perubahan</label>
-                    <input type="number" id="stock-quantity" class="w-full border-2 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-2xl font-black text-center" placeholder="0">
+                    <label class="block text-sm font-medium text-gray-700">Kuantitas <span class="text-red-500">*</span></label>
+                    <input type="number" id="stock-quantity" class="mt-1 block w-full border border-gray-300 rounded-md p-2" min="1" placeholder="Masukkan jumlah stok">
                 </div>
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-1">Catatan / Keperluan</label>
-                    <textarea id="stock-notes" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" rows="3" placeholder="Contoh: Produksi Board X, Pembelian baru, dll"></textarea>
+                    <label class="block text-sm font-medium text-gray-700">Catatan (Keperluan / Proyek)</label>
+                    <textarea id="stock-notes" class="mt-1 block w-full border border-gray-300 rounded-md p-2" rows="3" placeholder="Cth: Proyek 'Smart Home', Pembelian dari Supplier X"></textarea>
                 </div>
-                <button id="save-stock-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg transition transform active:scale-95">Proses Transaksi</button>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="close-modal-btn py-2 px-4 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold">Batal</button>
+                <button id="save-stock-btn" class="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">Proses Transaksi</button>
             </div>
         </div>
     </div>
 
-    <div id="message-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center animate-in zoom-in duration-200">
-            <div id="modal-icon" class="w-16 h-16 bg-blue-100 rounded-full mx-auto flex items-center justify-center text-blue-600 mb-4">
-                <i data-lucide="info" class="w-8 h-8"></i>
-            </div>
-            <h3 id="modal-title" class="text-2xl font-black text-gray-800 mb-2">Pesan</h3>
-            <p id="modal-message" class="text-gray-600 mb-6 leading-relaxed">Isi pesan di sini...</p>
-            <button id="message-modal-close-btn" class="w-full bg-gray-800 hover:bg-black text-white font-bold py-3 rounded-xl transition">Mengerti</button>
+    <div id="message-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <h3 id="modal-title" class="text-2xl font-bold text-gray-800 mb-3">Pesan</h3>
+            <p id="modal-message" class="text-gray-600 mb-6">Pesan di sini.</p>
+            <button id="message-modal-close-btn" class="py-2 px-6 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">Tutup</button>
         </div>
     </div>
 
     <script>
-        // Memastikan Lucide icons ter-render pada load awal
-        window.addEventListener('DOMContentLoaded', () => {
-            if (window.lucide) {
-                lucide.createIcons();
-            }
-        });
+        // Memastikan Lucide Icons dibuat setelah DOM dimuat
+        lucide.createIcons();
     </script>
+    
 </body>
 </html>
