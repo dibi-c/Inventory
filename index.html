@@ -683,39 +683,33 @@
         };
         
         // --- LOGIKA TOMBOL TUTUP SCANNER ---
-        const stopScanner = async () => {
-    if (html5QrcodeScanner) {
-        try {
-            // 1. Force stop melalui library (pake await agar sinkron)
-            if (html5QrcodeScanner.getState() !== 1) { // 1 = NOT_STARTED
-                await html5QrcodeScanner.stop();
-            }
-            await html5QrcodeScanner.clear();
-            console.log("Scanner cleared.");
-        } catch (err) {
-            console.warn("Library stop failed, forcing manual track termination:", err);
-        } finally {
-            // 2. MANUAL FORCE CLOSE: Matikan semua hardware stream yang masih aktif
-            // Ini adalah langkah 'nuklir' untuk memastikan lampu kamera mati
-            const videoElements = document.querySelectorAll('video');
-            videoElements.forEach(video => {
-                const stream = video.srcObject;
-                if (stream) {
-                    const tracks = stream.getTracks();
-                    tracks.forEach(track => track.stop()); // Hentikan hardware kamera
-                    video.srcObject = null;
+        window.stopScanner = async function() {
+        console.log("Mencoba menghentikan kamera...");
+            if (html5QrcodeScanner) {
+                // 1. Coba hentikan aliran kamera secara asinkron
+                try {
+                    if (html5QrcodeScanner.isScanning) {
+                        html5QrcodeScanner.stop()
+                            .then(() => console.log("Scanner stream stopped gracefully."))
+                            .catch((err) => console.warn("Error stopping scanner stream (stream might be already stopped):", err));
+                    }
+                } catch (e) {
+                    console.warn("Error trying to stop scanner stream:", e);
                 }
-            });
 
-            // 3. Reset variabel dan UI
-            html5QrcodeScanner = null;
-            const resultEl = getEl('scanner-result');
-            if (resultEl) {
-                resultEl.innerHTML = `<p class="text-gray-500">Pemindai ditutup paksa.</p>`;
+                // 2. Coba bersihkan elemen DOM dan state internal
+                try {
+                    html5QrcodeScanner.clear();
+                } catch (e) {
+                    console.warn("Error clearing scanner element/state:", e);
+                }
+                
+                // 3. Reset variabel global
+                html5QrcodeScanner = null;
+                getEl('scanner-result').innerHTML = `<p class="text-gray-500">Pemindai ditutup.</p>`;
+                
             }
-        }
-    }
-};
+        };
         // --- END LOGIKA TOMBOL TUTUP SCANNER ---
 
         const handleScannedBarcode = (barcode) => {
@@ -1509,7 +1503,7 @@ if (logoutBtnMobile) {
                 <p class="text-gray-500">Menunggu kamera...</p>
             </div>
             
-            <button onclick="stopScanner(); showView('list')" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
+            <button onclick="stopScanner()" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
                 <i data-lucide="x" class="w-5 h-5 inline mr-1"></i> Tutup Scanner
             </button>
         </div>
