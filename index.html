@@ -92,6 +92,10 @@
             document.querySelectorAll('.app-view').forEach(el => el.classList.add('hidden'));
         };
         const showView = (viewName) => {
+// PROTEKSI: Jika user tidak login dan mencoba akses selain login-view, paksa ke login
+    if (!userId && viewName !== 'login') {
+        viewName = 'login';
+    }
             hideAllViews();
             const viewEl = getEl(`${viewName}-view`);
             if (viewEl) {
@@ -220,6 +224,9 @@
                 getEl('user-info').textContent = userName;
                 isAuthReady = true;
                 
+       // Tampilkan sidebar HANYA jika ada user
+        getEl('sidebar').classList.remove('hidden');
+
                 // Pindah ke Dashboard jika baru login
                 if (currentView === 'login') {
                     showView('dashboard');
@@ -236,7 +243,9 @@
                 userId = null;
                 isAuthReady = false;
                 listenersAttached = false; // Reset jika log out
-                showView('login');
+                // Pastikan sidebar tersembunyi
+        getEl('sidebar').classList.add('hidden'); 
+        showView('login');
             }
         };
 
@@ -335,14 +344,14 @@
         };
 
         getEl('logout-btn').onclick = async () => {
-            try {
-                await signOut(auth);
-                // Modal akan tertutup dengan tombol 'Tutup' yang sudah diperbaiki
-                showMessageModal('Informasi', 'Anda telah berhasil Logout.');
-            } catch (error) {
-                showMessageModal('Error Logout', error.message);
-            }
-        };
+    try {
+        await signOut(auth);
+        // Refresh halaman secara total setelah logout berhasil
+        window.location.reload(); 
+    } catch (error) {
+        showMessageModal('Error Logout', error.message);
+    }
+};
 
 
         // --- Fungsi CRUD Komponen ---
@@ -674,31 +683,39 @@
         };
         
         // --- LOGIKA TOMBOL TUTUP SCANNER ---
-        const stopScanner = () => {
-            if (html5QrcodeScanner) {
-                // 1. Coba hentikan aliran kamera secara asinkron
-                try {
-                    if (html5QrcodeScanner.isScanning) {
-                        html5QrcodeScanner.stop()
-                            .then(() => console.log("Scanner stream stopped gracefully."))
-                            .catch((err) => console.warn("Error stopping scanner stream (stream might be already stopped):", err));
-                    }
-                } catch (e) {
-                    console.warn("Error trying to stop scanner stream:", e);
-                }
-
-                // 2. Coba bersihkan elemen DOM dan state internal
-                try {
-                    html5QrcodeScanner.clear();
-                } catch (e) {
-                    console.warn("Error clearing scanner element/state:", e);
-                }
-                
-                // 3. Reset variabel global
-                html5QrcodeScanner = null;
-                getEl('scanner-result').innerHTML = `<p class="text-gray-500">Pemindai ditutup.</p>`;
+        const stopScanner = async () => {
+    if (html5QrcodeScanner) {
+        try {
+            // 1. Force stop melalui library (pake await agar sinkron)
+            if (html5QrcodeScanner.getState() !== 1) { // 1 = NOT_STARTED
+                await html5QrcodeScanner.stop();
             }
-        };
+            await html5QrcodeScanner.clear();
+            console.log("Scanner cleared.");
+        } catch (err) {
+            console.warn("Library stop failed, forcing manual track termination:", err);
+        } finally {
+            // 2. MANUAL FORCE CLOSE: Matikan semua hardware stream yang masih aktif
+            // Ini adalah langkah 'nuklir' untuk memastikan lampu kamera mati
+            const videoElements = document.querySelectorAll('video');
+            videoElements.forEach(video => {
+                const stream = video.srcObject;
+                if (stream) {
+                    const tracks = stream.getTracks();
+                    tracks.forEach(track => track.stop()); // Hentikan hardware kamera
+                    video.srcObject = null;
+                }
+            });
+
+            // 3. Reset variabel dan UI
+            html5QrcodeScanner = null;
+            const resultEl = getEl('scanner-result');
+            if (resultEl) {
+                resultEl.innerHTML = `<p class="text-gray-500">Pemindai ditutup paksa.</p>`;
+            }
+        }
+    }
+};
         // --- END LOGIKA TOMBOL TUTUP SCANNER ---
 
         const handleScannedBarcode = (barcode) => {
@@ -964,6 +981,19 @@
 
         // --- Event Listeners UI Global ---
 
+// Tambahkan listener untuk logout mode mobile
+const logoutBtnMobile = getEl('logout-btn-mobile');
+if (logoutBtnMobile) {
+    logoutBtnMobile.onclick = async () => {
+        try {
+            await signOut(auth);
+            showMessageModal('Informasi', 'Anda telah berhasil Logout.');
+        } catch (error) {
+            showMessageModal('Error Logout', error.message);
+        }
+    };
+}
+
         // Navigasi
         const handleNavClick = (viewName) => {
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -1123,23 +1153,62 @@
 
 
         /* Responsive for mobile (Sidebar becomes bottom bar) */
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 100%;
-                height: auto;
-                position: fixed;
-                bottom: 0;
-                z-index: 10;
-                box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.1), 0 -2px 4px -2px rgb(0 0 0 / 0.1);
-            }
-            .content {
-                padding-left: 0;
-                padding-bottom: 80px; /* Space for mobile nav */
-            }
-            #sidebar-toggle-btn {
-                display: none; /* Hide toggle button on mobile */
-            }
-        }
+       /* Responsive for mobile (Sidebar becomes bottom bar with icons only) */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: fixed;
+        bottom: 0;
+        z-index: 50;
+        padding: 0.5rem;
+    }
+
+    .content {
+        padding-bottom: 80px; /* Beri ruang agar konten tidak tertutup bar */
+    }
+
+    /* Hilangkan semua teks & elemen dekoratif */
+    .nav-label, 
+    #sidebar-title, 
+    #sidebar-subtitle, 
+    .sidebar-footer, 
+    hr,
+    #sidebar-toggle-btn {
+        display: none !important;
+    }
+
+    /* Atur menu agar horizontal merata */
+    .sidebar div.flex-grow {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-around;
+        align-items: center;
+        width: 100%;
+    }
+
+    .nav-item {
+        padding: 0.75rem !important;
+        margin: 0 !important;
+        justify-content: center;
+        flex: 1;
+    }
+
+    .nav-item i {
+        margin-right: 0 !important;
+    }
+
+    /* Sembunyikan tombol tambah teks jika mengganggu, gunakan ikon saja */
+    #add-item-btn {
+        background-color: transparent !important; /* Agar tidak putih kotak besar */
+        border: none !important;
+        color: #2563eb !important; /* Warna biru icon */
+    }
+    
+    #add-item-btn:hover {
+        background-color: #f3f4f6 !important; /* Abu-abu muda saat ditekan di HP */
+    }
+}
         
         /* Desktop States (min-width: 768px) */
         @media (min-width: 768px) {
@@ -1249,24 +1318,35 @@
 
         <hr class="my-4 hidden md:block">
         
-        <div class="flex md:flex-col justify-around md:justify-start w-full md:w-auto space-x-0 md:space-x-0 md:space-y-2 flex-grow">
-            <div id="nav-dashboard" class="nav-item active">
-                <i data-lucide="layout-dashboard" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
-                <span class="nav-label">Dashboard</span>
-            </div>
-            <div id="nav-list" class="nav-item">
-                <i data-lucide="package-search" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
-                <span class="nav-label">Daftar Inventaris</span>
-            </div>
-            <div id="nav-scan" class="nav-item">
-                <i data-lucide="scan" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
-                <span class="nav-label">Scan Barcode</span>
-            </div>
-            <button id="add-item-btn" class="nav-item text-blue-600 hover:text-white border-2 border-blue-600 hover:bg-blue-600 bg-white md:mt-4">
-                <i data-lucide="plus-circle" class="w-5 h-5 mr-3 flex-shrink-0"></i> 
-                <span class="nav-label">Tambah Komponen</span>
-            </button>
+        <div class="flex md:flex-col justify-around md:justify-start w-full md:w-auto space-x-0 md:space-y-2 flex-grow">
+    
+    <div id="nav-dashboard" class="nav-item active flex items-center justify-center md:justify-start">
+        <i data-lucide="layout-dashboard" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+        <span class="nav-label hidden md:inline">Dashboard</span>
+    </div>
+
+    <div id="nav-list" class="nav-item flex items-center justify-center md:justify-start">
+        <i data-lucide="package-search" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+        <span class="nav-label hidden md:inline">Daftar Inventaris</span>
+    </div>
+
+    <div id="nav-scan" class="nav-item flex items-center justify-center md:justify-start">
+        <i data-lucide="scan" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+        <span class="nav-label hidden md:inline">Scan Barcode</span>
+    </div>
+    
+    
+   
+ <button id="add-item-btn" class="nav-item flex items-center justify-center md:justify-start w-full transition-all duration-200 border-2 border-blue-600 text-blue-600 bg-white hover:bg-blue-600 hover:text-white md:mt-4">
+    <i data-lucide="plus-circle" class="w-5 h-5 md:mr-3 flex-shrink-0"></i> 
+    <span class="nav-label hidden md:inline font-semibold">Tambah Komponen</span>
+</button>
+
+    <div id="logout-btn-mobile" class="nav-item text-red-500 md:hidden flex items-center justify-center">
+        <i data-lucide="log-out" class="w-5 h-5 flex-shrink-0"></i>
         </div>
+    
+</div>
 
         <div class="hidden md:block border-t pt-4 text-center sidebar-footer">
             <p class="text-xs text-gray-700 font-semibold truncate" id="user-info"></p>
