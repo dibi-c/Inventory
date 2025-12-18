@@ -652,7 +652,7 @@ const printBarcodeLabel = async (printElementId) => {
     format: "CODE128",
     displayValue: false, 
     // Gunakan 1.2 jika ID barang pendek, 1.0 jika ID barang sangat panjang
-    width: 0.5,          
+    width: 2,          
     height: 45,          // Sedikit lebih tinggi dari 40 agar lebih mudah dibaca scanner
     margin: 0,
     flat: true,          // Menghilangkan spasi tambahan di beberapa browser (lebih presisi)
@@ -750,7 +750,7 @@ const printBarcodeLabel = async (printElementId) => {
         };
         
         // --- LOGIKA TOMBOL TUTUP SCANNER ---
-        const stopScanner = () => {
+        window.stopScanner = () => {
             if (html5QrcodeScanner) {
                 // 1. Coba hentikan aliran kamera secara asinkron
                 try {
@@ -894,20 +894,26 @@ const printBarcodeLabel = async (printElementId) => {
                     showView('detail');
                 };
                 
-                itemDiv.innerHTML = `
-                    <div class="flex items-center space-x-4">
-                        <img src="${item.photoUrl}" alt="${item.name}" class="w-12 h-12 object-cover rounded-md flex-shrink-0">
-                        <div class="flex-grow min-w-0">
-                            <p class="text-lg font-bold truncate">${item.name}</p>
-                            <p class="text-sm text-gray-600 truncate">${item.value} | ${item.package || 'N/A'}</p>
-                        </div>
-                        <div class="flex flex-col items-end flex-shrink-0">
-                            <span class="font-extrabold text-2xl ${isLowStock ? 'text-red-600' : 'text-green-600'}">${item.stock || 0}</span>
-                            <span class="text-xs text-gray-500">${item.unit || 'pcs'}</span>
-                            <span class="text-xs text-gray-500">Lok: ${item.location}</span>
-                        </div>
-                    </div>
-                `;
+               // Temukan bagian ini di dalam fungsi renderInventoryList:
+itemDiv.innerHTML = `
+    <div class="flex items-center space-x-4">
+        <div class="relative">
+            <img src="${item.photoUrl}" alt="${item.name}" class="w-12 h-12 object-cover rounded-md flex-shrink-0">
+            <div class="text-[10px] text-center font-bold text-blue-600 mt-1 uppercase">
+               ${item.itemId}
+            </div>
+        </div>
+        <div class="flex-grow min-w-0">
+            <p class="text-lg font-bold truncate">${item.name}</p>
+            <p class="text-sm text-gray-600 truncate">${item.value} | ${item.package || 'N/A'}</p>
+        </div>
+        <div class="flex flex-col items-end flex-shrink-0">
+            <span class="font-extrabold text-2xl ${isLowStock ? 'text-red-600' : 'text-green-600'}">${item.stock || 0}</span>
+            <span class="text-xs text-gray-500">${item.unit || 'pcs'}</span>
+            <span class="text-xs text-gray-500">Lok: ${item.location}</span>
+        </div>
+    </div>
+`;
                 listEl.appendChild(itemDiv);
             });
         };
@@ -1249,14 +1255,14 @@ if (logoutBtnMobile) {
     .sidebar {
         width: 100%;
         height: auto;
-        position: fixed;
+        position: bottom;
         bottom: 0;
         z-index: 50;
         padding: 0.5rem;
     }
 
     .content {
-        padding-bottom: 80px; /* Beri ruang agar konten tidak tertutup bar */
+        height: auto;
     }
 
     /* Hilangkan semua teks & elemen dekoratif */
@@ -1279,7 +1285,7 @@ if (logoutBtnMobile) {
     }
 
     .nav-item {
-        padding: 0.75rem !important;
+        padding: 1.75rem !important;
         margin: 0 !important;
         justify-content: center;
         flex: 1;
@@ -1556,7 +1562,7 @@ if (logoutBtnMobile) {
 
                         <div class="space-y-3">
                             <p class="text-gray-700"><span class="font-bold w-32 inline-block">Kode Barang:</span> <span id="detail-id" class="font-mono bg-gray-100 p-1 rounded"></span></p>
-                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Spesifikasi/Value:</span> <span id="detail-value"></span></p>
+                            <p class="text-gray-700"><span class="font-bold w-32 inline-block">Spesifikasi:</span> <span id="detail-value"></span></p>
                             <p class="text-gray-700"><span class="font-bold w-32 inline-block">Package:</span> <span id="detail-package"></span></p>
                             <p class="text-gray-700"><span class="font-bold w-32 inline-block">Lokasi:</span> <span id="detail-location" class="bg-blue-100 p-1 rounded font-semibold"></span></p>
                             <p class="text-gray-700"><span class="font-bold w-32 inline-block">Minimum Stok:</span> <span id="detail-minstock"></span></p>
@@ -1607,7 +1613,7 @@ if (logoutBtnMobile) {
                 <p class="text-gray-500">Menunggu kamera...</p>
             </div>
             
-            <button onclick="stopScanner(); showView('list')" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
+            <button onclick="stopScanner()" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
                 <i data-lucide="x" class="w-5 h-5 inline mr-1"></i> Tutup Scanner
             </button>
         </div>
