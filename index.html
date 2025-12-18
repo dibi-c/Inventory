@@ -605,8 +605,7 @@ const printBarcodeLabel = async (printElementId) => {
     `);
     
     printWindow.document.close();
-};
-        
+};   
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
         // Menggunakan JsBarcode (via CDN) untuk merender Code-128
         const generateBarcodeDisplay = (content, name, itemId) => { // Tambahkan itemId
@@ -649,7 +648,7 @@ const printBarcodeLabel = async (printElementId) => {
                         window.JsBarcode(`#${barcodeId}`, content, {
                             format: "CODE128", // Format Code-128
                             displayValue: false, // JANGAN tampilkan di sini, karena teks akan dihandle terpisah
-                            width: 2,
+                            width: 1,
                             height: 40, // Sedikit lebih pendek
                             margin: 0, // Margin harus 0 agar pas
                             fontSize: 10,
