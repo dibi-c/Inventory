@@ -1159,6 +1159,54 @@ if (logoutBtnMobile) {
             }
         };
 
+// --- Logika Show/Hide Password ---
+const togglePasswordBtn = getEl('toggle-password-btn');
+if (togglePasswordBtn) {
+    togglePasswordBtn.onclick = () => {
+        const passwordInput = getEl('login-password');
+        const passwordIcon = getEl('password-icon');
+        const isPassword = passwordInput.type === 'password';
+        
+        passwordInput.type = isPassword ? 'text' : 'password';
+        passwordIcon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+        lucide.createIcons(); // Menggambar ulang ikon Lucide
+    };
+}
+
+// --- Logika Load Email (Ingat Saya) saat halaman dibuka ---
+window.addEventListener('DOMContentLoaded', () => {
+    const savedEmail = localStorage.getItem('eims_remembered_email');
+    if (savedEmail) {
+        getEl('login-email').value = savedEmail;
+        getEl('remember-me').checked = true;
+    }
+});
+
+// --- Modifikasi Logika Klik Login ---
+const originalLoginBtn = getEl('login-btn');
+if (originalLoginBtn) {
+    const originalLoginAction = originalLoginBtn.onclick;
+    originalLoginBtn.onclick = async () => {
+        const email = getEl('login-email').value;
+        const rememberMe = getEl('remember-me').checked;
+
+        if (rememberMe) {
+            localStorage.setItem('eims_remembered_email', email);
+        } else {
+            localStorage.removeItem('eims_remembered_email');
+        }
+        
+        // Tetap jalankan proses login Firebase yang asli
+        const password = getEl('login-password').value;
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            showMessageModal('Berhasil', 'Login berhasil! Selamat datang.');
+        } catch (error) {
+            showMessageModal('Error Login', error.message);
+        }
+    };
+}
+
         // Inisialisasi awal aplikasi
         window.addEventListener('DOMContentLoaded', () => {
              // 1. Muat library scanner secara non-blocking
@@ -1455,52 +1503,55 @@ if (logoutBtnMobile) {
     
     <main class="content flex-grow p-4 md:p-8">
         
-        <div id="login-view" class="app-view hidden max-w-sm mx-auto my-10 p-6 bg-white shadow-xl rounded-xl">
-            <h2 class="text-3xl font-bold text-center text-blue-600 mb-6">Login E-IMS</h2>
-            <div class="space-y-4">
-                <div>
-                    <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
-                    <input type="email" id="login-email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" value="teknisi@mail.com">
-                </div>
-                <div>
-                    <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" id="login-password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" value="password123">
-                </div>
-                <button id="login-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    Login
-                </button>
-                <button id="register-btn" class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md shadow-sm text-sm font-medium text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    Register (Buat Akun Baru)
-                </button>
-                
-                <hr class="my-4">
-                
-                <button id="toggle-config-btn" class="w-full text-xs text-gray-500 hover:text-gray-800 transition flex items-center justify-center">
-                    <i data-lucide="settings" class="w-4 h-4 inline mr-1"></i> Konfigurasi Lanjut
-                </button>
-
-                <div id="firebase-config-form" class="hidden border border-gray-200 p-4 rounded-lg bg-gray-50 space-y-3">
-                    <p class="text-sm font-bold text-gray-700">Ganti Konfigurasi Firebase</p>
-                    <div>
-                        <label for="config-apikey" class="block text-xs font-medium text-gray-600">API Key <span class="text-red-500">*</span></label>
-                        <input type="text" id="config-apikey" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
-                    </div>
-                    <div>
-                        <label for="config-projectid" class="block text-xs font-medium text-gray-600">Project ID <span class="text-red-500">*</span></label>
-                        <input type="text" id="config-projectid" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
-                    </div>
-                    <div>
-                        <label for="config-authdomain" class="block text-xs font-medium text-gray-600">Auth Domain (Opsional)</label>
-                        <input type="text" id="config-authdomain" class="mt-1 block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm">
-                    </div>
-                    <button id="save-config-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-500 hover:bg-red-600">
-                        Simpan & Muat Ulang
+<div id="login-view" class="app-view min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+        <div class="text-center mb-8">
+            <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="package" class="w-8 h-8 text-blue-600"></i>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-800">E-IMS Login</h2>
+            <p class="text-gray-500">Sistem Informasi Inventaris</p>
+        </div>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Email</label>
+                <input type="email" id="login-email" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="nama@email.com">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Password</label>
+                <div class="relative">
+                    <input type="password" id="login-password" class="mt-1 block w-full border border-gray-300 rounded-md p-2 pr-10 focus:ring-blue-500 focus:border-blue-500" placeholder="••••••••">
+                    <button type="button" id="toggle-password-btn" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                        <i id="password-icon" data-lucide="eye"></i>
                     </button>
-                    <p class="text-xs text-red-400 text-center">* Menyimpan konfigurasi akan me-refresh aplikasi.</p>
                 </div>
+            </div>
 
+            <div class="flex items-center">
+                <input type="checkbox" id="remember-me" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                <label for="remember-me" class="ml-2 block text-sm text-gray-900 font-medium">Ingat Saya</label>
+            </div>
+
+            <button id="login-btn" class="w-full py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition duration-200">Login</button>
+            <button id="register-btn" class="w-full py-2 px-4 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold transition duration-200">Daftar Akun Baru</button>
+            
+            <div class="pt-4 border-t">
+                <button id="toggle-config-btn" class="w-full py-2 text-sm text-blue-600 hover:underline flex items-center justify-center">
+                    <i data-lucide="settings" class="w-4 h-4 mr-1"></i> Konfigurasi Lanjut
+                </button>
+                
+                <div id="firebase-config-form" class="hidden mt-4 p-4 bg-gray-50 rounded-lg space-y-3 border border-gray-200">
+                    <p class="text-xs text-gray-600 font-bold uppercase">Firebase Project Config</p>
+                    <input type="text" id="config-apikey" placeholder="Firebase API Key" class="w-full text-xs p-2 border rounded">
+                    <input type="text" id="config-authdomain" placeholder="Auth Domain (Optional)" class="w-full text-xs p-2 border rounded">
+                    <input type="text" id="config-projectid" placeholder="Project ID" class="w-full text-xs p-2 border rounded">
+                    <button id="save-config-btn" class="w-full py-1 bg-green-600 text-white text-xs rounded font-bold">Simpan & Muat Ulang</button>
+                </div>
             </div>
         </div>
+    </div>
+</div>
 
         <div id="dashboard-view" class="app-view hidden">
             <h2 class="text-3xl font-bold text-gray-800 mb-6">Dashboard Inventaris</h2>
