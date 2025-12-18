@@ -533,46 +533,44 @@ const printBarcodeLabel = async (printElementId) => {
             <head>
                 <title>Cetak Label</title>
                 <style>
-                    /* Ukuran kertas 64mm x 32mm */
-                    @page { size: 64mm 32mm; margin: 2; }
+                    @page { size: 64mm 32mm; margin: 0; }
                     
                     body {
                         margin: 0; padding: 0;
                         width: 64mm; height: 32mm;
-                        display: flex; flex-direction: column;
-                        justify-content: center; align-items: center;
+                        display: flex; justify-content: center; align-items: center;
                         background-color: white;
                         font-family: sans-serif;
                     }
 
                     .container {
-                        /* Memberikan padding 2mm agar teks tidak mepet ke pinggir fisik kertas */
-                        width: 60mm; 
-                        height: 28mm;
+                        /* Membuat bingkai kotak */
+                        width: 62mm; 
+                        height: 30mm;
+                        border: 1.5pt solid black; /* Garis bingkai hitam */
+                        box-sizing: border-box;
+                        
                         display: flex; flex-direction: column;
                         justify-content: center; align-items: center;
                         text-align: center;
-                        overflow: hidden;
+                        padding: 1mm;
                     }
 
                     svg {
-                        /* Lebar barcode dikurangi sedikit agar margin kanan-kiri lebih lega */
-                        width: 85% !important;
+                        width: 90% !important;
                         height: auto !important;
-                        max-height: 18mm;
+                        max-height: 16mm;
                         display: block;
                         margin-bottom: 2px;
                     }
 
                     .print-name {
-                        font-size: 9pt; /* Ukuran font dikecilkan sedikit agar muat lebih banyak */
+                        font-size: 9pt;
                         font-weight: bold;
                         line-height: 1.1;
                         margin: 0;
-                        padding: 0 2mm; /* Jeda aman di sisi teks */
+                        width: 100%;
                         display: ${isHideText ? 'none' : '-webkit-box'};
-                        
-                        /* Logika agar teks pindah baris otomatis (maksimal 2 baris) */
                         word-break: break-word;
                         -webkit-line-clamp: 2; 
                         -webkit-box-orient: vertical;
@@ -583,7 +581,6 @@ const printBarcodeLabel = async (printElementId) => {
                         font-family: monospace; 
                         font-size: 7pt;
                         margin-top: 1px;
-                        color: #333;
                         display: ${isHideText ? 'none' : 'block'};
                     }
                 </style>
@@ -596,7 +593,6 @@ const printBarcodeLabel = async (printElementId) => {
                     window.onload = function() {
                         setTimeout(function() {
                             window.print();
-                            // window.close(); // Aktifkan jika ingin tab otomatis tertutup setelah cetak
                         }, 600);
                     };
                 <\/script>
@@ -605,7 +601,7 @@ const printBarcodeLabel = async (printElementId) => {
     `);
     
     printWindow.document.close();
-};   
+};
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
         // Menggunakan JsBarcode (via CDN) untuk merender Code-128
         const generateBarcodeDisplay = (content, name, itemId) => { // Tambahkan itemId
@@ -1739,4 +1735,5 @@ if (logoutBtnMobile) {
     
 </body>
 </html>
+
 
