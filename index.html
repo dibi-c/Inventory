@@ -505,102 +505,52 @@ const sellPrice = parseInt(getEl('item-sell-price').value) || 0;
         
         // --- Fungsi Cetak Label Barcode ---
         const printBarcodeLabel = (printElementId) => {
-    const printContent = getEl(printElementId);
-    
-    if (!printContent) {
-        showMessageModal('Gagal Mencetak', 'Elemen cetak tidak ditemukan.');
-        return;
-    }
-    
-    // 1. Cek status toggle untuk menyembunyikan/menampilkan nama/id
-    const nameToggle = getEl('toggle-print-name');
-    const printNameEl = printContent.querySelector('.print-name');
-    const printIdEl = printContent.querySelector('.print-id');
+            const printContent = getEl(printElementId);
+            
+            if (!printContent) {
+                showMessageModal('Gagal Mencetak', 'Elemen cetak tidak ditemukan.');
+                return;
+            }
+            
+            // Cek status toggle untuk menyembunyikan/menampilkan nama/id
+            const nameToggle = getEl('toggle-print-name');
+            const printNameEl = document.querySelector(`#${printElementId} .print-name`);
+            const printIdEl = document.querySelector(`#${printElementId} .print-id`);
 
-    // Simpan status display asli (untuk UI aplikasi)
-    const originalPrintNameDisplay = printNameEl ? printNameEl.style.display : '';
-    const originalPrintIdDisplay = printIdEl ? printIdEl.style.display : '';
+            // Simpan status display asli sebelum mencetak
+            const originalPrintNameDisplay = printNameEl ? printNameEl.style.display : 'block';
+            const originalPrintIdDisplay = printIdEl ? printIdEl.style.display : 'block';
+            
+            // Terapkan visibility untuk cetak (jika toggle tidak aktif, sembunyikan)
+            if (nameToggle && !nameToggle.checked) {
+                if (printNameEl) printNameEl.style.display = 'none';
+                if (printIdEl) printIdEl.style.display = 'none';
+            } else {
+                 // Pastikan terlihat jika toggle aktif
+                if (printNameEl) printNameEl.style.display = 'block';
+                if (printIdEl) printIdEl.style.display = 'block';
+            }
+            
+            // Bungkus konten dalam div temporer
+            const tempDiv = document.createElement('div');
+            tempDiv.className = 'print-label-container'; // Class ini akan diisolasi oleh CSS @media print
+            tempDiv.innerHTML = printContent.innerHTML;
+            
+            // Sisipkan div temporer ini ke body sebelum mencetak
+            document.body.appendChild(tempDiv);
+            
+            // Berikan delay kecil (misal 500ms) agar browser mobile sempat merender elemen
+setTimeout(() => {
+    window.print();
     
-    // Terapkan filter berdasarkan toggle sebelum mengambil konten
-    let hideStyle = "";
-    if (nameToggle && !nameToggle.checked) {
-        hideStyle = "display: none !important;";
-    }
-
-    // 2. Buat iframe tersembunyi
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-
-    // 3. Susun HTML untuk dicetak di dalam iframe
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
-        <html>
-            <head>
-                <title>Cetak Label</title>
-                <style>
-                    /* Aturan khusus printer label */
-                    @page { 
-                        size: 64mm 32mm; 
-                        margin: 0; 
-                    }
-                    body { 
-                        margin: 0; 
-                        padding: 0;
-                        display: flex; 
-                        flex-direction: column; 
-                        justify-content: center; 
-                        align-items: center; 
-                        width: 64mm; 
-                        height: 32mm; 
-                        font-family: sans-serif;
-                    }
-                    /* Styling konten barcode */
-                    svg { 
-                        width: 90%; 
-                        height: auto; 
-                        max-height: 20mm;
-                    }
-                    .print-name { 
-                        font-size: 9pt; 
-                        font-weight: bold; 
-                        text-align: center; 
-                        margin-top: 2px;
-                        ${hideStyle} 
-                    }
-                    .print-id { 
-                        font-size: 7pt; 
-                        margin-bottom: 2px;
-                        ${hideStyle}
-                    }
-                </style>
-            </head>
-            <body>
-                ${printContent.innerHTML}
-            </body>
-        </html>
-    `);
-    doc.close();
-
-    // 4. Panggil Dialog Printer
-    iframe.contentWindow.focus();
-    
-    // Berikan waktu sedikit agar browser merender isi iframe sebelum cetak
+    // Berikan delay lebih lama sebelum menghapus elemen agar proses cetak tidak terputus
     setTimeout(() => {
-        iframe.contentWindow.print();
-        
-        // Hapus kembali iframe setelah dialog printer tertutup
-        setTimeout(() => {
-            document.body.removeChild(iframe);
-        }, 1000);
-    }, 500);
-};
+        document.body.removeChild(tempDiv);
+        if (printNameEl) printNameEl.style.display = originalPrintNameDisplay;
+        if (printIdEl) printIdEl.style.display = originalPrintIdDisplay;
+    }, 1000); 
+}, 500);
+        };
         
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
         // Menggunakan JsBarcode (via CDN) untuk merender Code-128
