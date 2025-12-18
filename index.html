@@ -7,6 +7,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -504,53 +508,84 @@ const sellPrice = parseInt(getEl('item-sell-price').value) || 0;
         };
         
         // --- Fungsi Cetak Label Barcode ---
-        const printBarcodeLabel = (printElementId) => {
-            const printContent = getEl(printElementId);
-            
-            if (!printContent) {
-                showMessageModal('Gagal Mencetak', 'Elemen cetak tidak ditemukan.');
-                return;
-            }
-            
-            // Cek status toggle untuk menyembunyikan/menampilkan nama/id
-            const nameToggle = getEl('toggle-print-name');
-            const printNameEl = document.querySelector(`#${printElementId} .print-name`);
-            const printIdEl = document.querySelector(`#${printElementId} .print-id`);
-
-            // Simpan status display asli sebelum mencetak
-            const originalPrintNameDisplay = printNameEl ? printNameEl.style.display : 'block';
-            const originalPrintIdDisplay = printIdEl ? printIdEl.style.display : 'block';
-            
-            // Terapkan visibility untuk cetak (jika toggle tidak aktif, sembunyikan)
-            if (nameToggle && !nameToggle.checked) {
-                if (printNameEl) printNameEl.style.display = 'none';
-                if (printIdEl) printIdEl.style.display = 'none';
-            } else {
-                 // Pastikan terlihat jika toggle aktif
-                if (printNameEl) printNameEl.style.display = 'block';
-                if (printIdEl) printIdEl.style.display = 'block';
-            }
-            
-            // Bungkus konten dalam div temporer
-            const tempDiv = document.createElement('div');
-            tempDiv.className = 'print-label-container'; // Class ini akan diisolasi oleh CSS @media print
-            tempDiv.innerHTML = printContent.innerHTML;
-            
-            // Sisipkan div temporer ini ke body sebelum mencetak
-            document.body.appendChild(tempDiv);
-            
-            // Berikan delay kecil (misal 500ms) agar browser mobile sempat merender elemen
-setTimeout(() => {
-    window.print();
+const printBarcodeLabel = async (printElementId) => {
+    const printContent = getEl(printElementId);
     
-    // Berikan delay lebih lama sebelum menghapus elemen agar proses cetak tidak terputus
-    setTimeout(() => {
-        document.body.removeChild(tempDiv);
-        if (printNameEl) printNameEl.style.display = originalPrintNameDisplay;
-        if (printIdEl) printIdEl.style.display = originalPrintIdDisplay;
-    }, 1000); 
-}, 500);
-        };
+    if (!printContent) {
+        showMessageModal('Gagal', 'Elemen tidak ditemukan.');
+        return;
+    }
+
+    // 1. Cek Toggle Nama/ID
+    const nameToggle = getEl('toggle-print-name');
+    const isHideText = nameToggle && !nameToggle.checked;
+
+    // 2. Pastikan Barcode sudah ter-render (Cek apakah SVG punya isi)
+    const svgElement = printContent.querySelector('svg');
+    if (svgElement && svgElement.innerHTML.trim() === "") {
+        showMessageModal('Tunggu', 'Barcode sedang diproses, silakan coba lagi dalam sedetik.');
+        return;
+    }
+
+    // 3. Buat Jendela Baru
+    const printWindow = window.open('', '_blank');
+    
+    // Ambil isi HTML (termasuk SVG barcode yang sudah jadi)
+    const barcodeHTML = printContent.innerHTML;
+
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>Cetak Label</title>
+                <style>
+                    @page { size: 64mm 32mm; margin: 0; }
+                    body {
+                        margin: 0; padding: 0;
+                        width: 64mm; height: 32mm;
+                        display: flex; flex-direction: column;
+                        justify-content: center; align-items: center;
+                    }
+                    .container {
+                        width: 100%; height: 100%;
+                        display: flex; flex-direction: column;
+                        justify-content: center; align-items: center;
+                        text-align: center;
+                    }
+                    svg {
+                        width: 90% !important;
+                        height: auto !important;
+                        max-height: 22mm;
+                        display: block;
+                    }
+                    .print-name {
+                        font-family: sans-serif; font-size: 10pt;
+                        font-weight: bold; margin-top: 2px;
+                        display: ${isHideText ? 'none' : 'block'};
+                    }
+                    .print-id {
+                        font-family: monospace; font-size: 7pt;
+                        display: ${isHideText ? 'none' : 'block'};
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    ${barcodeHTML}
+                </div>
+                <script>
+                    // Berikan jeda 500ms agar browser sempat menggambar SVG secara utuh
+                    window.onload = function() {
+                        setTimeout(function() {
+                            window.print();
+                        }, 500);
+                    };
+                <\/script>
+            </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+};
         
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
         // Menggunakan JsBarcode (via CDN) untuk merender Code-128
