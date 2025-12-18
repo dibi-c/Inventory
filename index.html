@@ -1255,14 +1255,14 @@ if (logoutBtnMobile) {
     .sidebar {
         width: 100%;
         height: auto;
-        position: bottom;
-        bottom: 0;
+        position: fixed;
+        top: 0;
         z-index: 50;
         padding: 0.5rem;
     }
 
     .content {
-        height: auto;
+        padding-top: 100px !important;
     }
 
     /* Hilangkan semua teks & elemen dekoratif */
@@ -1285,7 +1285,7 @@ if (logoutBtnMobile) {
     }
 
     .nav-item {
-        padding: 1.75rem !important;
+        padding: 0.75rem !important;
         margin: 0 !important;
         justify-content: center;
         flex: 1;
