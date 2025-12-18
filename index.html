@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -16,6 +15,9 @@
         
         // Menggunakan setLogLevel('Debug') untuk melihat log detail di console
         setLogLevel('Debug');
+
+
+
 
         // --- Variabel Global Canvas (Harus Digunakan) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -377,6 +379,9 @@
             const isEditing = getEl('item-form-modal').dataset.mode === 'edit';
             const componentRef = isEditing ? doc(getComponentColRef(), selectedComponentId) : doc(getComponentColRef());
 
+const buyPrice = parseInt(getEl('item-buy-price').value) || 0;
+const sellPrice = parseInt(getEl('item-sell-price').value) || 0;
+
             const componentData = {
                 itemId: id,
                 name,
@@ -388,6 +393,9 @@
                 minStock,
                 unit,
                 barcodeContent,
+    buyPrice: parseInt(getEl('item-buy-price').value) || 0,
+    margin: parseInt(getEl('item-margin').value) || 0,
+    sellPrice: parseInt(getEl('item-sell-price').value) || 0,
                 updatedAt: serverTimestamp(),
             };
 
@@ -531,19 +539,17 @@
             // Sisipkan div temporer ini ke body sebelum mencetak
             document.body.appendChild(tempDiv);
             
-            // 4. Panggil dialog cetak
-            window.print();
-            
-            // 5. Bersihkan/Kembalikan body setelah cetak
-            setTimeout(() => {
-                // Hapus div temporer
-                document.body.removeChild(tempDiv);
-                
-                // Kembalikan status display asli
-                if (printNameEl) printNameEl.style.display = originalPrintNameDisplay;
-                if (printIdEl) printIdEl.style.display = originalPrintIdDisplay;
-                
-            }, 100); 
+            // Berikan delay kecil (misal 500ms) agar browser mobile sempat merender elemen
+setTimeout(() => {
+    window.print();
+    
+    // Berikan delay lebih lama sebelum menghapus elemen agar proses cetak tidak terputus
+    setTimeout(() => {
+        document.body.removeChild(tempDiv);
+        if (printNameEl) printNameEl.style.display = originalPrintNameDisplay;
+        if (printIdEl) printIdEl.style.display = originalPrintIdDisplay;
+    }, 1000); 
+}, 500);
         };
         
         // --- Fungsi Barcode (QRCode Generator & Barcode Renderer) ---
@@ -684,8 +690,7 @@
         };
         
         // --- LOGIKA TOMBOL TUTUP SCANNER ---
-        window.stopScanner = async function() {
-        console.log("Mencoba menghentikan kamera...");
+        const stopScanner = () => {
             if (html5QrcodeScanner) {
                 // 1. Coba hentikan aliran kamera secara asinkron
                 try {
@@ -708,7 +713,6 @@
                 // 3. Reset variabel global
                 html5QrcodeScanner = null;
                 getEl('scanner-result').innerHTML = `<p class="text-gray-500">Pemindai ditutup.</p>`;
-                
             }
         };
         // --- END LOGIKA TOMBOL TUTUP SCANNER ---
@@ -853,7 +857,12 @@
             const item = inventory.find(i => i.id === selectedComponentId);
             const detailEl = getEl('item-detail');
             const historyEl = getEl('item-history');
+
+const formatIDR = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(val);
+getEl('detail-sell-price').textContent = formatIDR(item.sellPrice || 0);
+getEl('detail-buy-price').textContent = formatIDR(item.buyPrice || 0);
             
+
             if (!item) {
                 detailEl.innerHTML = '<p class="p-4 text-red-500">Komponen tidak ditemukan.</p>';
                 return;
@@ -921,6 +930,21 @@
             }
         };
 
+// Fungsi hitung otomatis
+const calculateSellPrice = () => {
+    const buyPrice = parseFloat(getEl('item-buy-price').value) || 0;
+    const marginPercent = parseFloat(getEl('item-margin').value) || 0;
+    
+    if (buyPrice > 0) {
+        const sellPrice = buyPrice + (buyPrice * (marginPercent / 100));
+        getEl('item-sell-price').value = Math.round(sellPrice); // Bulatkan harga
+    }
+};
+
+// Pasang event listener ke input
+getEl('item-buy-price').addEventListener('input', calculateSellPrice);
+getEl('item-margin').addEventListener('input', calculateSellPrice);
+
         // --- Modals ---
 
         const openItemFormModal = (mode, item = {}) => {
@@ -929,6 +953,18 @@
             
             formModal.dataset.mode = mode;
             
+if (mode === 'edit') {
+    // ... pengisian data lainnya ...
+    getEl('item-buy-price').value = item.buyPrice || 0;
+    getEl('item-margin').value = item.margin || 0;
+    getEl('item-sell-price').value = item.sellPrice || 0;
+} else {
+    // reset jika mode 'add'
+    getEl('item-buy-price').value = '';
+    getEl('item-margin').value = '';
+    getEl('item-sell-price').value = '';
+}
+
             // Reset form
             getEl('item-id').value = '';
             getEl('item-name').value = '';
@@ -1466,7 +1502,14 @@ if (logoutBtnMobile) {
                             <p class="text-gray-700"><span class="font-bold w-32 inline-block">Minimum Stok:</span> <span id="detail-minstock"></span></p>
                             <p class="text-gray-700"><span class="font-bold w-32 inline-block">Merek:</span> <span id="detail-brand"></span></p>
                         </div>
-                        
+                        <div class="flex justify-between py-2 border-b">
+    <span class="text-gray-600">Harga Beli:</span>
+    <span id="detail-buy-price" class="font-semibold text-gray-800">Rp 0</span>
+</div>
+<div class="flex justify-between py-2 border-b">
+    <span class="text-gray-600">Harga Jual:</span>
+    <span id="detail-sell-price" class="font-bold text-blue-600">Rp 0</span>
+</div>
                         <div class="mt-8 flex space-x-4">
                             <button id="stock-in-btn" class="flex-1 py-3 px-4 rounded-xl text-white bg-green-600 hover:bg-green-700 font-semibold transition">
                                 <i data-lucide="plus" class="w-5 h-5 inline mr-1"></i> Stok Masuk
@@ -1504,7 +1547,7 @@ if (logoutBtnMobile) {
                 <p class="text-gray-500">Menunggu kamera...</p>
             </div>
             
-            <button onclick="stopScanner()" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
+            <button onclick="stopScanner(); showView('list')" class="mt-6 py-2 px-6 rounded-xl text-white bg-red-500 hover:bg-red-600 font-semibold transition">
                 <i data-lucide="x" class="w-5 h-5 inline mr-1"></i> Tutup Scanner
             </button>
         </div>
@@ -1541,7 +1584,7 @@ if (logoutBtnMobile) {
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Spesifikasi/Value <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-medium text-gray-700">Spesifikasi<span class="text-red-500">*</span></label>
                         <input type="text" id="item-value" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: 10k ohm 1%, 47uF 50V">
                     </div>
                 </div>
@@ -1558,6 +1601,21 @@ if (logoutBtnMobile) {
                         <label class="block text-sm font-medium text-gray-700">Lokasi <span class="text-red-500">*</span></label>
                         <input type="text" id="item-location" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="Cth: Rak A1-05">
                     </div>
+
+<div class="grid grid-cols-1 gap-4 mt-4"> <div>
+        <label class="block text-sm font-medium text-gray-700">Harga Beli (Rp)</label>
+        <input type="number" id="item-buy-price" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="0">
+    </div>
+    <div>
+        <label class="block text-sm font-medium text-gray-700">Margin (%)</label>
+        <input type="number" id="item-margin" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="0">
+    </div>
+    <div>
+        <label class="block text-sm font-medium text-gray-700">Harga Jual (Rp)</label>
+        <input type="number" id="item-sell-price" class="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-gray-50 font-bold" placeholder="0" readonly>
+    </div>
+</div>
+
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
