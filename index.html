@@ -534,7 +534,7 @@ const printBarcodeLabel = async (printElementId) => {
                 <title>Cetak Label</title>
                 <style>
                     /* Ukuran kertas 64mm x 32mm */
-                    @page { size: 64mm 32mm; margin: 0; }
+                    @page { size: 64mm 32mm; margin: 2; }
                     
                     body {
                         margin: 0; padding: 0;
@@ -649,7 +649,7 @@ const printBarcodeLabel = async (printElementId) => {
                             format: "CODE128", // Format Code-128
                             displayValue: false, // JANGAN tampilkan di sini, karena teks akan dihandle terpisah
                             width: 1,
-                            height: 40, // Sedikit lebih pendek
+                            height: 25, // Sedikit lebih pendek
                             margin: 0, // Margin harus 0 agar pas
                             fontSize: 10,
                         });
@@ -1739,3 +1739,4 @@ if (logoutBtnMobile) {
     
 </body>
 </html>
+
